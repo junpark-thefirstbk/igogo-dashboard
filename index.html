@@ -269,11 +269,19 @@
     const allData = [];
 
     for (const [email, info] of members) {
-      const docRef = doc(db, "dashboards", email, "months", currentMonth);
-      const snap = await getDoc(docRef);
-      const data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
-      const items = data.items || getItemsForMember(email);
-      const memos = data.memos || {};
+      let items = getItemsForMember(email);
+      let memos = {};
+      try {
+        const docRef = doc(db, "dashboards", email, "months", currentMonth);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          items = (data.items && data.items.length > 0) ? data.items : getItemsForMember(email);
+          memos = data.memos || {};
+        }
+      } catch(e) {
+        console.warn("Firestore read failed for", email, e.message);
+      }
       allData.push({ email, info, items, memos });
     }
 
