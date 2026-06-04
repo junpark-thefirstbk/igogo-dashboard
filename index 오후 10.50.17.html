@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>아이고고 팀 대시보드</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- ✅ Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ══════════════════════════════════════════
+  // 🔧 여기에 Firebase 설정값을 붙여넣으세요
+  // ══════════════════════════════════════════
+  const firebaseConfig = {
+    apiKey: "AIzaSyBdblYWOcFBz0vwfINCvnQCBwKGusS0A0w",
+    authDomain: "igogo-dashboard.firebaseapp.com",
+    projectId: "igogo-dashboard",
+    storageBucket: "igogo-dashboard.firebasestorage.app",
+    messagingSenderId: "441414216798",
+    appId: "1:441414216798:web:1e50381da350bb3c3a18cf"
+  };
+  // ══════════════════════════════════════════
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // ── 팀원 정보 (관리자가 사전 정의) ──────────────────
+  const TEAM_MEMBERS = {
+    "moon@igogo.kr":   { name: "문수빈", role: "운영마케팅", color: "#4f8aff", isAdmin: false },
+    "ijkim@igogo.kr":    { name: "김일주", role: "디자인",     color: "#a78bfa", isAdmin: false },
+    "sjkim@igogo.kr": { name: "김승진", role: "개발",       color: "#2dd4a0", isAdmin: false },
+    "alex@igogo.kr":    { name: "박지호", role: "세일즈",     color: "#f5a623", isAdmin: false },
+    "kim0914@igogo.kr":  { name: "김유정", role: "콘텐츠",     color: "#f472b6", isAdmin: false },
+    "ywseong@igogo.kr":{ name: "성영운", role: "고객경험",  color: "#38bdf8", isAdmin: false },
+    "junpark@igogo.kr":       { name: "박형준", role: "팀 리더",    color: "#ffffff", isAdmin: true  },
+  };
+
+  const MONTH_PHRASE = "재방문을 자극하는 프로덕트로, 훌륭한 파트너의 양질의 체험으로, 더 많은 콘텐츠를 통해 더 많은 유입으로, 효율적인 매체/외부채널/앱 운영관리로 역대 최대 실적을 기록하는 6~8월을 위하여";
+
+  // ── 상태 ────────────────────────────────────
+  let currentUser = null;
+  let currentMember = null;
+  let currentMonth = "2026-06";
+  let dashboardData = {};
+  let unsubscribe = null;
+
+  // ── Google 로그인 ───────────────────────────
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ hd: "igogo.kr" }); // igogo.kr 계정만 허용
+  window.doGoogleLogin = async () => {
+    const errEl = document.getElementById("login-error");
+    errEl.textContent = "";
+    try {
+      await signInWithPopup(auth, provider);
+    } catch(e) {
+      if (e.code === "auth/popup-closed-by-user") return;
+      errEl.textContent = "로그인에 실패했습니다. igogo.kr 계정으로 시도해주세요.";
+    }
+  };
+  window.doLogout = async () => {
+    if (unsubscribe) unsubscribe();
+    await signOut(auth);
+  };
+
+  // ── Auth 상태 변경 ───────────────────────────
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      currentUser = user;
+      currentMember = TEAM_MEMBERS[user.email] || { name: user.email, role: "", color: "#fff", isAdmin: false };
+      showApp();
+    } else {
+      currentUser = null;
+      currentMember = null;
+      showLogin();
+    }
+  });
+
+  // ── 화면 전환 ────────────────────────────────
+  function showLogin() {
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("app-screen").style.display   = "none";
+  }
+  function showApp() {
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app-screen").style.display   = "block";
+    document.getElementById("user-name").textContent  = currentMember.name;
+    document.getElementById("user-role").textContent  = currentMember.role;
+    document.getElementById("user-avatar").style.background = currentMember.color;
+    document.getElementById("user-avatar").textContent = currentMember.name[0];
+
+    if (currentMember.isAdmin) {
+      loadAdminView();
+    } else {
+      loadMemberDashboard();
+    }
+  }
+
+  // ── 월 선택 ──────────────────────────────────
+  window.changeMonth = (m) => {
+    currentMonth = m;
+    document.querySelectorAll(".month-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector(`[data-month="${m}"]`)?.classList.add("active");
+    if (currentMember.isAdmin) loadAdminView(); else loadMemberDashboard();
+  };
+
+  // ══════════════════════════════════════════════
+  //  팀원 대시보드
+  // ══════════════════════════════════════════════
+  async function loadMemberDashboard() {
+    const email = currentUser.email;
+    const docRef = doc(db, "dashboards", email, "months", currentMonth);
+
+    // 실시간 리스닝
+    if (unsubscribe) unsubscribe();
+    unsubscribe = onSnapshot(docRef, snap => {
+      dashboardData = snap.exists() ? snap.data() : getInitialData(email);
+      renderDashboard();
+    });
+  }
+
+  function getInitialData(email) {
+    return { items: getItemsForMember(email), memos: {}, retro: {}, updatedAt: null };
+  }
+
+  // ── 아이템 렌더 ──────────────────────────────
+  function renderDashboard() {
+    const items = dashboardData.items || [];
+    const memos = dashboardData.memos || {};
+    const retro = dashboardData.retro || {};
+
+    const done   = items.filter(i => i.status === "done").length;
+    const doing  = items.filter(i => i.status === "doing").length;
+    const total  = items.length;
+    const pct    = total ? Math.round(done / total * 100) : 0;
+
+    document.getElementById("stat-total").textContent = total;
+    document.getElementById("stat-done").textContent  = done;
+    document.getElementById("stat-doing").textContent = doing;
+    document.getElementById("stat-pct").textContent   = pct + "%";
+    document.getElementById("progress-fill").style.width = pct + "%";
+
+    document.getElementById("month-phrase").textContent = MONTH_PHRASE;
+    document.getElementById("dashboard-name").textContent = currentMember.name;
+    document.getElementById("dashboard-role").textContent = currentMember.role;
+    document.getElementById("dashboard-month").textContent = currentMonth;
+    document.getElementById("dashboard-accent").style.color = currentMember.color;
+
+    // 섹션별 그룹
+    const sections = {};
+    items.forEach(item => {
+      if (!sections[item.section]) sections[item.section] = [];
+      sections[item.section].push(item);
+    });
+
+    let html = "";
+    Object.entries(sections).forEach(([section, sItems]) => {
+      html += `<div class="section">
+        <div class="section-header">
+          <span class="section-dot" style="background:${currentMember.color}"></span>
+          <span class="section-title">${section}</span>
+          <span class="section-count">${sItems.filter(i=>i.status==='done').length}/${sItems.length}</span>
+        </div>`;
+      sItems.forEach(item => {
+        const s = item.status || "todo";
+        const memo = memos[item.id] || "";
+        html += `
+        <div class="item-card ${s}" id="card-${item.id}">
+          <div class="item-header" onclick="toggleCard('${item.id}')">
+            <div class="status-btn" onclick="event.stopPropagation();cycleStatus('${item.id}')"
+              style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};
+                     background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
+              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'
+                         :(s==='doing'?'<div style="width:6px;height:6px;border-radius:50%;background:#0d0f14;margin:auto"></div>':'')}
+            </div>
+            <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
+            ${item.tag?`<span class="item-tag">${item.tag}</span>`:''}
+            ${item.priority?`<span class="prio-badge prio-${item.priority}">${item.priority}순위</span>`:''}
+            <span class="status-text ${s}">${{todo:'진행전',doing:'진행중',done:'완료',hold:'보류'}[s]}</span>
+          </div>
+          <div class="item-body" id="body-${item.id}">
+            ${item.desc?`<div class="item-desc">${item.desc}</div>`:''}
+            <div class="memo-area">
+              <div class="memo-label">비고 / 진행 메모</div>
+              <textarea class="memo-input" id="memo-${item.id}"
+                placeholder="진행 현황, 수치, 인사이트를 기록하세요..."
+                onblur="saveMemo('${item.id}', this.value)">${memo}</textarea>
+            </div>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+
+    // 회고 섹션
+    html += `
+    <div class="section retro-section">
+      <div class="section-header">
+        <span class="section-dot" style="background:#ff5c5c"></span>
+        <span class="section-title">${currentMonth} 월간 회고</span>
+        <span class="section-count" style="color:#ff5c5c">발표용</span>
+      </div>
+      ${[
+        ["retro-result",  "이달의 가장 큰 성과 (수치 기반)"],
+        ["retro-miss",    "완수하지 못한 항목 & 이유"],
+        ["retro-insight", "다음 달에 가져갈 인사이트 / 개선 방향"],
+        ["retro-kpi",     "주간 KPI 트래킹 (매주 업데이트)"],
+      ].map(([key, label]) => `
+      <div class="retro-card">
+        <div class="memo-label">${label}</div>
+        <textarea class="memo-input retro-input" id="${key}"
+          placeholder="${label}..."
+          onblur="saveRetro('${key}', this.value)">${retro[key]||''}</textarea>
+      </div>`).join('')}
+    </div>`;
+
+    document.getElementById("dashboard-content").innerHTML = html;
+  }
+
+  // ── 상태 순환 ────────────────────────────────
+  window.cycleStatus = async (itemId) => {
+    const statuses = ["todo","doing","done","hold"];
+    const items = [...(dashboardData.items || [])];
+    const idx = items.findIndex(i => i.id === itemId);
+    if (idx < 0) return;
+    const cur = items[idx].status || "todo";
+    items[idx].status = statuses[(statuses.indexOf(cur)+1) % statuses.length];
+    await saveData({ items });
+  };
+
+  // ── 메모 저장 ────────────────────────────────
+  window.saveMemo = async (itemId, value) => {
+    const memos = { ...(dashboardData.memos || {}), [itemId]: value };
+    await saveData({ memos });
+  };
+  window.saveRetro = async (key, value) => {
+    const retro = { ...(dashboardData.retro || {}), [key]: value };
+    await saveData({ retro });
+  };
+
+  async function saveData(partial) {
+    const email = currentUser.email;
+    const docRef = doc(db, "dashboards", email, "months", currentMonth);
+    const merged = { ...dashboardData, ...partial, updatedAt: new Date().toISOString() };
+    await setDoc(docRef, merged, { merge: true });
+  }
+
+  // ── 카드 토글 ────────────────────────────────
+  window.toggleCard = (id) => {
+    document.getElementById("body-" + id)?.classList.toggle("open");
+  };
+
+  // ══════════════════════════════════════════════
+  //  관리자 뷰
+  // ══════════════════════════════════════════════
+  async function loadAdminView() {
+    document.getElementById("dashboard-name").textContent = "팀 전체 현황";
+    document.getElementById("dashboard-role").textContent = "리더 뷰";
+    document.getElementById("dashboard-month").textContent = currentMonth;
+    document.getElementById("month-phrase").textContent = MONTH_PHRASE;
+
+    const members = Object.entries(TEAM_MEMBERS).filter(([,v]) => !v.isAdmin);
+    const allData = [];
+
+    for (const [email, info] of members) {
+      let items = getItemsForMember(email);
+      let memos = {};
+      try {
+        const docRef = doc(db, "dashboards", email, "months", currentMonth);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          items = (data.items && data.items.length > 0) ? data.items : getItemsForMember(email);
+          memos = data.memos || {};
+        }
+      } catch(e) {
+        console.warn("Firestore read failed for", email, e.message);
+      }
+      allData.push({ email, info, items, memos });
+    }
+
+    // ── 전체 팀 통계
+    const totalAll  = allData.reduce((s, d) => s + d.items.length, 0);
+    const doneAll   = allData.reduce((s, d) => s + d.items.filter(i=>i.status==='done').length, 0);
+    const doingAll  = allData.reduce((s, d) => s + d.items.filter(i=>i.status==='doing').length, 0);
+    const pctAll    = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+    document.getElementById("stat-total").textContent = totalAll;
+    document.getElementById("stat-done").textContent  = doneAll;
+    document.getElementById("stat-doing").textContent = doingAll;
+    document.getElementById("stat-pct").textContent   = pctAll + "%";
+    document.getElementById("progress-fill").style.width = pctAll + "%";
+
+    // ── 요약 카드 그리드
+    let html = `<div class="admin-grid">`;
+    for (const { email, info, items } of allData) {
+      const done  = items.filter(i=>i.status==='done').length;
+      const doing = items.filter(i=>i.status==='doing').length;
+      const total = items.length;
+      const pct   = total ? Math.round(done/total*100) : 0;
+      html += `
+      <div class="admin-card" onclick="toggleMemberDetail('detail-${email.split('@')[0]}')">
+        <div class="admin-card-top">
+          <div class="admin-avatar" style="background:${info.color};color:#0d0f14">${info.name[0]}</div>
+          <div>
+            <div class="admin-name">${info.name}</div>
+            <div class="admin-role">${info.role}</div>
+          </div>
+          <div class="admin-pct" style="color:${info.color}">${pct}%</div>
+        </div>
+        <div class="admin-bar-wrap">
+          <div class="admin-bar"><div class="admin-bar-fill" style="width:${pct}%;background:${info.color}"></div></div>
+        </div>
+        <div class="admin-stats">
+          <span>전체 <b>${total}</b></span>
+          <span style="color:#34d97b">완료 <b>${done}</b></span>
+          <span style="color:#f5c842">진행중 <b>${doing}</b></span>
+          <span style="color:#8890a4">미완 <b>${total-done-doing}</b></span>
+        </div>
+        <div class="card-expand-hint">클릭하여 액션아이템 보기 ▾</div>
+      </div>`;
+    }
+    html += `</div>`;
+
+    // ── 팀원별 상세 아이템 리스트 (접힌 상태로)
+    for (const { email, info, items, memos } of allData) {
+      const done  = items.filter(i=>i.status==='done').length;
+      const total = items.length;
+      const sections = {};
+      items.forEach(item => {
+        if (!sections[item.section]) sections[item.section] = [];
+        sections[item.section].push(item);
+      });
+
+      html += `
+      <div class="member-detail-block" id="detail-${email.split('@')[0]}">
+        <div class="member-detail-header" style="border-left:3px solid ${info.color}">
+          <div class="admin-avatar" style="background:${info.color};color:#0d0f14;width:28px;height:28px;font-size:12px;margin-right:10px">${info.name[0]}</div>
+          <span style="color:${info.color};font-weight:700;font-size:16px">${info.name}</span>
+          <span style="color:#8890a4;margin-left:8px;font-size:13px">${info.role}</span>
+          <span style="font-family:var(--mono);font-size:12px;margin-left:auto;color:${info.color}">${total?Math.round(done/total*100):0}% 완료</span>
+        </div>`;
+
+      Object.entries(sections).forEach(([section, sItems]) => {
+        html += `<div class="section" style="margin-bottom:16px">
+          <div class="section-header">
+            <span class="section-dot" style="background:${info.color}"></span>
+            <span class="section-title">${section}</span>
+            <span class="section-count">${sItems.filter(i=>i.status==='done').length}/${sItems.length}</span>
+          </div>`;
+        sItems.forEach(item => {
+          const s = item.status || 'todo';
+          const statusLabel = {todo:'진행전', doing:'진행중', done:'완료', hold:'보류'}[s];
+          const memo = memos[item.id] || '';
+          html += `
+          <div class="item-card ${s}">
+            <div class="item-header">
+              <div class="status-btn" style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
+                ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>':''}
+              </div>
+              <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
+              ${item.tag?`<span class="item-tag">${item.tag}</span>`:''}
+              ${item.priority?`<span class="prio-badge prio-${item.priority}">${item.priority}순위</span>`:''}
+              <span class="status-text ${s}">${statusLabel}</span>
+            </div>
+            ${memo?`<div class="admin-memo">💬 ${memo}</div>`:''}
+          </div>`;
+        });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
+    document.getElementById("dashboard-content").innerHTML = html;
+  }
+
+  window.toggleMemberDetail = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isOpen = el.classList.contains('open');
+    // 모두 닫기
+    document.querySelectorAll('.member-detail-block').forEach(b => b.classList.remove('open'));
+    if (!isOpen) el.classList.add('open');
+    if (!isOpen) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  window.viewMemberDetail = async (email) => {
+    const info = TEAM_MEMBERS[email];
+    const docRef = doc(db, "dashboards", email, "months", currentMonth);
+    const snap = await getDoc(docRef);
+    const data = snap.exists() ? snap.data() : { items: getItemsForMember(email) };
+    const items = data.items || [];
+    const memos = data.memos || {};
+    const retro = data.retro || {};
+
+    const done = items.filter(i=>i.status==='done').length;
+    const total = items.length;
+
+    let html = `
+    <div class="back-btn" onclick="${currentMember.isAdmin?'loadAdminView()':''}">← 전체 현황으로</div>
+    <div class="member-detail-header" style="border-left:3px solid ${info.color}">
+      <span style="color:${info.color};font-weight:700;font-size:18px">${info.name}</span>
+      <span style="color:#8890a4;margin-left:8px">${info.role}</span>
+      <span style="font-family:var(--mono);font-size:12px;margin-left:auto;color:${info.color}">${total?Math.round(done/total*100):0}% 완료</span>
+    </div>`;
+
+    const sections = {};
+    items.forEach(item => {
+      if (!sections[item.section]) sections[item.section] = [];
+      sections[item.section].push(item);
+    });
+
+    Object.entries(sections).forEach(([section, sItems]) => {
+      html += `<div class="section"><div class="section-header">
+        <span class="section-dot" style="background:${info.color}"></span>
+        <span class="section-title">${section}</span>
+        <span class="section-count">${sItems.filter(i=>i.status==='done').length}/${sItems.length}</span>
+      </div>`;
+      sItems.forEach(item => {
+        const s = item.status || "todo";
+        const memo = memos[item.id] || "";
+        html += `<div class="item-card ${s}">
+          <div class="item-header">
+            <div class="status-btn" style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};
+              background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
+              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>':''}
+            </div>
+            <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
+            <span class="status-text ${s}">${{todo:'진행전',doing:'진행중',done:'완료',hold:'보류'}[s]}</span>
+          </div>
+          ${memo?`<div class="admin-memo">${memo}</div>`:''}
+        </div>`;
+      });
+      html += `</div>`;
+    });
+
+    if (retro['retro-result'] || retro['retro-insight']) {
+      html += `<div class="section retro-section"><div class="section-header">
+        <span class="section-dot" style="background:#ff5c5c"></span>
+        <span class="section-title">회고</span></div>`;
+      if (retro['retro-result'])  html += `<div class="retro-read"><b>성과:</b> ${retro['retro-result']}</div>`;
+      if (retro['retro-miss'])    html += `<div class="retro-read"><b>미완수:</b> ${retro['retro-miss']}</div>`;
+      if (retro['retro-insight']) html += `<div class="retro-read"><b>인사이트:</b> ${retro['retro-insight']}</div>`;
+      html += `</div>`;
+    }
+
+    document.getElementById("dashboard-content").innerHTML = html;
+  };
+
+  // ══════════════════════════════════════════════
+  //  팀원별 초기 액션아이템 데이터
+  // ══════════════════════════════════════════════
+  function getItemsForMember(email) {
+    const data = {
+      "moon@igogo.kr": [
+        { id:"ms1", section:"① 큐레이션", label:"1단계: 클리어마켓 MVP 고객향 구현 완료", tag:"~5월말", status:"todo", desc:"클리어마켓 고객 웹 화면 완성, 파트너센터 연동 확인" },
+        { id:"ms2", section:"① 큐레이션", label:"2단계: 캘린더 탭 — 날짜 옵션 효율 전시 + 클리어마켓 통합", tag:"6월 초~중순", status:"todo", desc:"일반 상품 날짜 옵션 + 클리어마켓 옵션 함께 노출" },
+        { id:"ms3", section:"① 큐레이션", label:"3단계: 핫딜 캘린더 — 카카오 위클리 프로모션 데일리화", tag:"6월 중~하순", status:"todo", desc:"6~7월 카카오 위클리 프로모션 상품 데일리 핫딜 캘린더 구현" },
+        { id:"ms4", section:"① 큐레이션", label:"리텐션: 인스타 매일 핫딜 콘텐츠 루틴화", tag:"6월내", status:"todo", desc:"매니챗+리틀리 통한 앱 유입 유도, 프로모션 핫딜 캘린더 구축" },
+        { id:"ms5", section:"① 큐레이션", label:"월별 실제 예산 규모 추산 시각화", tag:"6월1주", status:"todo", desc:"Claude 활용하여 관광바우처/사회적기업/자체예산 통합 시각화" },
+        { id:"ms6", section:"② 상품", label:"프라이빗 옵션 상시화 — 팀 단위 구매 상품 리스트업 및 옵션 추가", status:"todo", desc:"작년 여름~올해 봄 팀 단위 구매 많았던 상품 우선순위 리스트업" },
+        { id:"ms7", section:"② 상품", label:"상품 콘셉트 명확화 — 안 팔리는 슬롯 정리 및 특화 옵션 전환", status:"todo", desc:"여름 숲체험: 오전 슬롯 제거 → 오후~밤숲 특화, 카카오 채널 단독 프로모션 활용" },
+        { id:"ms8", section:"② 상품", label:"채널 맞춤 상품화 — 카카오/꾸그 채널별 UX 맞춤 상품 구성", status:"todo", desc:"카카오: 프라이빗 팀 옵션 / 꾸그: 중등 특화형 리포지셔닝" },
+        { id:"ms9", section:"③ 외부협력", label:"카카오/네이버 월간 협력형 프로모션 집중 운영", status:"todo", desc:"파트너 프로모션 스펙 → 앱 내 특가 구좌 데일리 핫딜로 연결" },
+        { id:"ms10",section:"③ 외부협력", label:"꾸그 협력 — 여름방학 단기 대학탐방 협력 운영 및 2학기 검토", status:"todo" },
+        { id:"ms11",section:"③ 외부협력", label:"베네피아 서브 마케팅 — 앱 내 복지포인트 안내 배너 신설", status:"todo" },
+        { id:"ms12",section:"③ 외부협력", label:"런즈 연결 매출 테스트", status:"todo" },
+        { id:"ms13",section:"④ 광고",    label:"관광바우처 예산 집행 — 여름방학 주력 카테고리 노출 집중", tag:"2,000만원", status:"todo" },
+        { id:"ms14",section:"④ 광고",    label:"파트너 예산(광고BM) — 역사체험 7할 + 기타 3할 집행", status:"todo" },
+        { id:"ms15",section:"④ 광고",    label:"자체 예산 — 특가탭/발견탭 소재 테스트", status:"todo" },
+      ],
+      "ijkim@igogo.kr": [
+        { id:"kj1", section:"① 특가탭 신설", label:"파트너센터 — 클리어마켓 탭 신설 디자인", status:"todo", desc:"환불율 예측 정보 대시보드 연동 설계 포함" },
+        { id:"kj2", section:"① 특가탭 신설", label:"고객 웹 — 클리어마켓 전용 상품 리스트 + 상세페이지 디자인", status:"todo", desc:"구매 후 3시간 이내 직접 환불 UX 포함" },
+        { id:"kj3", section:"① 특가탭 신설", label:"모바일 웹 알림 시스템 설계 — 환불율 수준별 앱 푸시 알림 UX", status:"todo" },
+        { id:"kj4", section:"① 특가탭 신설", label:"파트너센터 — 얼리버드/핫딜 설정 view 디자인", status:"todo" },
+        { id:"kj5", section:"② 발견탭 리뉴얼", label:"스트립 캘린더 UI 적용 — 날짜 기반 탐색 발견탭 디자인", status:"todo" },
+        { id:"kj6", section:"③ 파트너 모바일", label:"파트너 모바일 — 상품관리/판매내역/대시보드 최소 기능 디자인", status:"todo" },
+        { id:"kj7", section:"④ 운영 디자인", label:"여름 버전 스플래시 제작", status:"todo" },
+        { id:"kj8", section:"④ 운영 디자인", label:"여름 시즌 기획전/팝업/배너 소재 제작 (네이버, 베네피아, 카카오)", status:"todo" },
+      ],
+      "sjkim@igogo.kr": [
+        { id:"ks1", section:"① 클리어마켓", label:"외주 MVP 개발 — 파트너센터 옵션 수동 선택/등록 기능", tag:"형곤님", status:"doing", desc:"파트너센터 옵션 수동 선택/등록 + 웹 클리어마켓+특가탭 화면 추가" },
+        { id:"ks2", section:"① 클리어마켓", label:"웹 구매 UI 기능/기획 사전 검토 및 공유", status:"todo" },
+        { id:"ks3", section:"① 클리어마켓", label:"마켓 상품 기록/로그 — 어드민/파트너센터 설계", status:"todo" },
+        { id:"ks4", section:"① 클리어마켓", label:"QA 대비 모니터링 및 최종 배포", status:"todo" },
+        { id:"ks5", section:"② 운영효율증대", label:"어드민 유저관리 — 자녀 연령 기준 검색/추출 및 목록 다운로드", status:"doing" },
+        { id:"ks6", section:"② 운영효율증대", label:"상품관리 — 옵션 재고 및 판매 현황 한눈에 보기", status:"doing" },
+        { id:"ks7", section:"③ 서비스개선",  label:"발견탭 디벨롭 — 일정 기반 탐색 개발", status:"todo" },
+        { id:"ks8", section:"③ 서비스개선",  label:"검색 화면 개선 — 특정 목적 유저 초점", status:"todo" },
+      ],
+      "alex@igogo.kr": [
+        { id:"pj1", section:"① 상품 최적화 (6월)", label:"진로/캠프+@ 신규 상품 추가 영업", tag:"~6/5", status:"todo", desc:"안데르센 / 영어캠프(라이즈어학원) / 주말캠프(아쿠아티움) / 주니어 천문스쿨" },
+        { id:"pj2", section:"① 상품 최적화 (6월)", label:"역사체험 슈퍼얼리버드 제안/운영", tag:"6/8~", status:"todo", desc:"국중박/과천과학관 4회 수업 대상, 비수기용 프로모션 설계" },
+        { id:"pj3", section:"① 상품 최적화 (6월)", label:"원어민 실내체험 반 PB 상품 기획", tag:"6/15~", status:"todo" },
+        { id:"pj4", section:"② 협업 극대화 (6월)", label:"단체수업 추가 판매 프로세스/시스템 설계", tag:"~6/14", status:"todo" },
+        { id:"pj5", section:"② 협업 극대화 (6월)", label:"그레이트북스 브랜디드 상품 개편", tag:"~6/5", status:"todo" },
+        { id:"pj6", section:"② 협업 극대화 (6월)", label:"인플루언서 1차 협업 — 라이브뮤지엄 X 생활명품 문지애", tag:"6/8~", status:"todo" },
+        { id:"pj7", section:"③ 시스템 보완 (6월)", label:"고객 VOC 정리", tag:"6월2주", status:"todo" },
+        { id:"pj8", section:"③ 시스템 보완 (6월)", label:"파트너 VOC 수집 (+클리어마켓 아이디어)", tag:"6월2주", status:"todo" },
+        { id:"pj9", section:"③ 시스템 보완 (6월)", label:"고객센터/파트너스 상담 체계 정책 개선", tag:"6월3~4주", status:"todo" },
+        { id:"pj10",section:"④ 7월 예정",  label:"역사체험 얼리버드 운영 (ing)", tag:"7월", status:"hold" },
+        { id:"pj11",section:"④ 7월 예정",  label:"원어민 실내체험 반 PB 상품 운영 (ing)", tag:"7월", status:"hold" },
+        { id:"pj12",section:"④ 7월 예정",  label:"단체수업 2차 전용상품: 원어민 필드 트립", tag:"7월", status:"hold" },
+        { id:"pj13",section:"④ 7월 예정",  label:"인플루언서 2차 협업: 더클래스멘토링 X 문지애 / 스누투어 X 83부부", tag:"7월", status:"hold" },
+      ],
+      "kim0914@igogo.kr": [
+        { id:"ky1", section:"① 인스타그램", label:"히어로 콘텐츠 6종 제작 및 업로드", tag:"시리즈화", status:"todo", desc:"6월 가볼만한 전시/행사, 국중박 주변 체험, 관광공모전 여행지, 실내체험 외" },
+        { id:"ky2", section:"① 인스타그램", label:"스낵 콘텐츠 — 썸네일 1장+본문 텍스트 루틴 제작", status:"todo" },
+        { id:"ky3", section:"① 인스타그램", label:"피드 콘텐츠 릴스 영상화 — 카드뉴스 연속 방식 15건+", tag:"15건+", status:"todo" },
+        { id:"ky4", section:"② 블로그",    label:"인스타 콘텐츠 재가공 및 블로그 업로드", tag:"15건+", status:"todo" },
+        { id:"ky5", section:"② 블로그",    label:"매주 화) 여름 주력 상품 대량 포스팅 — 일 5건 목표 월 20건+", tag:"20건+", status:"todo", desc:"차주 카카오 프로모션 & 네이버 오늘끝딜 대비 포스팅 포함, AI 파이프라인 활용" },
+        { id:"ky6", section:"③ 쇼핑커넥트", label:"주간 트렌드 리포트(HTML) 생성기 제작 및 배포 루틴화", tag:"~6/12 시작", status:"todo" },
+        { id:"ky7", section:"③ 쇼핑커넥트", label:"매주 월) 네이버 블로그 인플루언서 메일링", tag:"1,500명/월", status:"todo" },
+        { id:"ky8", section:"④ 브랜드커넥트", label:"깨비의숲마을 밤숲 체험단 — 블로그5+앱5개", tag:"10개", status:"todo" },
+        { id:"ky9", section:"④ 브랜드커넥트", label:"숲파티포레 밤숲 체험단 — 블로그5+앱5개", tag:"10개", status:"todo" },
+        { id:"ky10",section:"④ 브랜드커넥트", label:"큐라스픽 국중박 체험단 — 블로그4+앱4+인스타4개", tag:"12개", status:"todo" },
+      ],
+      "ywseong@igogo.kr": [
+        { id:"sy1", section:"① 고객경험", label:"월간/주간 고객 문의(VOC) 분석 체계 구축 및 운영", priority:1, status:"todo", desc:"네이버 Q&A 아카이브 → AI OCR → 4가지 속성 분류" },
+        { id:"sy2", section:"① 고객경험", label:"주간 리뷰 분석 — 스마트스토어 리뷰 취합 및 엑셀 추출", priority:1, status:"todo" },
+        { id:"sy3", section:"② 챌린저스 리뷰", label:"앱/네이버 리뷰이벤트 등록 (베스트리뷰 선정)", priority:1, tag:"6월1주", status:"todo" },
+        { id:"sy4", section:"② 챌린저스 리뷰", label:"앱/네이버 주간 쿠폰(2천원) 지급 루틴화 — 매주 목 or 금", priority:1, status:"todo" },
+        { id:"sy5", section:"② 챌린저스 리뷰", label:"4/5월 수강자 리뷰 등록 템플릿 메시지 발송", priority:1, tag:"6월1주", status:"todo" },
+        { id:"sy6", section:"③ 팀구매 CRM",   label:"카카오 프로모션 이후 프라이빗 신청자 그룹 엑셀 편성", priority:2, tag:"6월1주", status:"todo" },
+        { id:"sy7", section:"③ 팀구매 CRM",   label:"마케팅 수신 동의 고객 대상 크로스셀링 메시지 발송", priority:2, status:"todo" },
+        { id:"sy8", section:"④ AX툴 고도화",  label:"자동 그룹 편성기 개발 — 엑셀 첨부 시 자동 배정", priority:3, tag:"6월내", status:"todo" },
+        { id:"sy9", section:"④ AX툴 고도화",  label:"스케줄표 생성 — 역사체험 파트너사 판매 추이 분석", priority:3, status:"todo" },
+        { id:"sy10",section:"⑤ 소통/카페",    label:"주 1회 앱/네이버 우수 댓글 답글 달기", priority:4, status:"todo" },
+        { id:"sy11",section:"⑤ 소통/카페",    label:"네이버 카페 활성화 — 상품 알림/베스트리뷰/콘텐츠 품앗이", priority:4, status:"todo" },
+      ],
+    };
+    return data[email] || [];
+  }
+
+  // Enter 키로 로그인
+
+</script>
+
+<style>
+:root {
+  --bg: #0d0f14;
+  --surface: #141720;
+  --surface2: #1c2030;
+  --border: #2a2f42;
+  --gray: #8890a4;
+  --text: #e8eaf0;
+  --text2: #adb3c8;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Noto Sans KR', sans-serif;
+  --green: #34d97b;
+  --yellow: #f5c842;
+  --red: #ff5c5c;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.6; min-height:100vh; }
+
+/* ── LOGIN ── */
+#login-screen {
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh;
+  background: radial-gradient(ellipse at 30% 40%, rgba(79,138,255,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 70% 70%, rgba(124,92,252,0.06) 0%, transparent 50%),
+              var(--bg);
+}
+.login-box {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:40px 36px; width:380px;
+}
+.login-logo { font-family:var(--mono); font-size:11px; color:#4f8aff; letter-spacing:0.2em; text-transform:uppercase; margin-bottom:6px; }
+.login-title { font-size:22px; font-weight:700; margin-bottom:4px; }
+.login-sub { font-size:12px; color:var(--gray); margin-bottom:28px; }
+.login-label { font-size:11px; color:var(--gray); margin-bottom:6px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em; }
+.login-input {
+  width:100%; background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; padding:11px 14px; color:var(--text); font-family:var(--sans); font-size:14px;
+  outline:none; transition:border-color 0.2s; margin-bottom:14px;
+}
+.login-input:focus { border-color:#4f8aff; }
+.login-btn {
+  width:100%; background:#4f8aff; border:none; border-radius:8px;
+  padding:12px; color:#fff; font-family:var(--sans); font-size:14px; font-weight:600;
+  cursor:pointer; transition:opacity 0.2s; margin-top:4px;
+}
+.login-btn:hover { opacity:0.85; }
+.google-btn {
+  width:100%; background:#fff; border:1px solid #dadce0; border-radius:8px;
+  padding:11px 14px; color:#3c4043; font-family:var(--sans); font-size:14px; font-weight:500;
+  cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;
+  transition:box-shadow 0.2s, background 0.2s; margin-top:8px;
+}
+.google-btn:hover { box-shadow:0 1px 6px rgba(0,0,0,0.2); background:#f8f9fa; }
+.login-error { color:var(--red); font-size:12px; margin-top:8px; min-height:18px; }
+
+/* ── APP ── */
+#app-screen { display:none; }
+.topbar {
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:0 32px; height:56px; display:flex; align-items:center; gap:16px;
+  position:sticky; top:0; z-index:100;
+}
+.topbar-logo { font-family:var(--mono); font-size:11px; color:#4f8aff; letter-spacing:0.08em; margin-right:8px; font-weight:500; }
+.month-btn {
+  font-family:var(--mono); font-size:11px; padding:5px 12px; border-radius:6px;
+  border:1px solid var(--border); background:transparent; color:var(--gray);
+  cursor:pointer; transition:all 0.15s;
+}
+.month-btn.active, .month-btn:hover { border-color:#4f8aff; color:#4f8aff; background:rgba(79,138,255,0.08); }
+.topbar-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
+.user-chip { display:flex; align-items:center; gap:8px; }
+#user-avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#0d0f14; }
+#user-name { font-size:13px; font-weight:500; }
+#user-role { font-size:11px; color:var(--gray); }
+.logout-btn { font-family:var(--mono); font-size:11px; color:var(--gray); background:transparent; border:1px solid var(--border); border-radius:6px; padding:4px 10px; cursor:pointer; }
+.logout-btn:hover { border-color:var(--red); color:var(--red); }
+
+/* ── MAIN ── */
+.main { max-width:960px; margin:0 auto; padding:28px 32px 80px; }
+.dash-header {
+  background: linear-gradient(135deg, var(--surface2), #1a1f35);
+  border:1px solid var(--border); border-radius:12px; padding:24px 28px; margin-bottom:24px;
+}
+.dash-phrase { font-size:12px; color:var(--text2); line-height:1.8; border-left:3px solid; border-color:inherit; padding-left:14px; margin-bottom:16px; }
+.dash-name-row { display:flex; align-items:baseline; gap:10px; margin-bottom:16px; }
+.dash-name { font-size:22px; font-weight:700; }
+.dash-role { font-size:14px; color:var(--gray); }
+.dash-month { font-family:var(--mono); font-size:12px; color:var(--gray); margin-left:auto; }
+.stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:14px; }
+.stat-box { text-align:center; }
+.stat-num { font-family:var(--mono); font-size:26px; font-weight:500; }
+.stat-lbl { font-size:11px; color:var(--gray); margin-top:2px; }
+.overall-bar { height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+#progress-fill { height:100%; background:linear-gradient(90deg,#4f8aff,#7c5cfc); border-radius:3px; transition:width 0.6s ease; }
+
+/* ── SECTION ── */
+.section { margin-bottom:28px; }
+.section-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+.section-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.section-title { font-size:14px; font-weight:700; }
+.section-count { font-family:var(--mono); font-size:11px; color:var(--gray); margin-left:auto; }
+
+/* ── ITEM CARD ── */
+.item-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; overflow:hidden; transition:border-color 0.2s; }
+.item-card:hover { border-color:rgba(79,138,255,0.3); }
+.item-card.done { opacity:0.65; }
+.item-header { display:flex; align-items:center; gap:10px; padding:13px 16px; cursor:pointer; }
+.status-btn {
+  width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
+  flex-shrink:0; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center;
+}
+.item-label { flex:1; font-size:13px; font-weight:500; }
+.item-label.done-text { text-decoration:line-through; color:var(--gray); }
+.item-tag { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; background:rgba(79,138,255,0.1); color:#4f8aff; flex-shrink:0; }
+.prio-badge { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; flex-shrink:0; }
+.prio-1 { background:rgba(255,92,92,0.12); color:var(--red); }
+.prio-2 { background:rgba(245,166,35,0.12); color:#f5a623; }
+.prio-3 { background:rgba(79,138,255,0.12); color:#4f8aff; }
+.prio-4 { background:rgba(136,144,164,0.12); color:var(--gray); }
+.status-text { font-family:var(--mono); font-size:10px; flex-shrink:0; }
+.status-text.todo { color:var(--gray); }
+.status-text.doing { color:var(--yellow); }
+.status-text.done { color:var(--green); }
+.status-text.hold { color:var(--red); }
+
+.item-body { display:none; padding:0 16px 14px 46px; }
+.item-body.open { display:block; }
+.item-desc { font-size:12px; color:var(--text2); margin-bottom:10px; line-height:1.7; }
+.memo-area { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.memo-label { font-family:var(--mono); font-size:10px; color:var(--gray); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; }
+.memo-input { width:100%; background:transparent; border:none; outline:none; color:var(--text2); font-family:var(--sans); font-size:13px; resize:vertical; min-height:56px; line-height:1.7; }
+.memo-input::placeholder { color:var(--border); }
+
+/* ── RETRO ── */
+.retro-section .item-card { display:none; }
+.retro-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:8px; }
+.retro-input { min-height:70px; }
+.retro-read { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:8px; font-size:13px; color:var(--text2); line-height:1.7; }
+
+/* ── ADMIN ── */
+.admin-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media(max-width:700px){ .admin-grid { grid-template-columns:1fr 1fr; } }
+.admin-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; cursor:pointer; transition:border-color 0.2s; }
+.admin-card:hover { border-color:rgba(79,138,255,0.4); }
+.admin-card-top { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.admin-avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+.admin-name { font-size:14px; font-weight:600; }
+.admin-role { font-size:11px; color:var(--gray); }
+.admin-pct { font-family:var(--mono); font-size:20px; font-weight:500; margin-left:auto; }
+.admin-bar-wrap { margin-bottom:10px; }
+.admin-bar { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+.admin-bar-fill { height:100%; border-radius:2px; transition:width 0.6s; }
+.admin-stats { display:flex; gap:12px; font-size:11px; color:var(--gray); }
+.admin-stats b { font-weight:600; }
+.back-btn { font-size:12px; color:#4f8aff; cursor:pointer; margin-bottom:16px; display:inline-block; }
+.back-btn:hover { text-decoration:underline; }
+.member-detail-header { display:flex; align-items:center; padding:12px 16px; border-left:3px solid; background:var(--surface2); border-radius:8px; margin-bottom:16px; }
+
+.member-detail-block { display:none; margin-bottom:28px; }
+.member-detail-block.open { display:block; }
+.card-expand-hint { font-size:10px; color:var(--gray); text-align:right; margin-top:8px; font-family:var(--mono); }
+.admin-card:hover .card-expand-hint { color:#4f8aff; }
+
+.admin-memo { font-size:12px; color:var(--gray); padding:6px 16px 10px 46px; line-height:1.6; font-style:italic; }
+</style>
+</head>
+<body>
+
+<!-- ── 로그인 화면 ── -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">igogo · team</div>
+    <div class="login-title">6월 대시보드</div>
+    <div class="login-sub">아이고고 팀 계정(@igogo.kr)으로 로그인하세요</div>
+    <button class="google-btn" onclick="doGoogleLogin()">
+      <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+        <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.548 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      Google 계정으로 로그인
+    </button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ── 앱 화면 ── -->
+<div id="app-screen">
+  <div class="topbar">
+    <span class="topbar-logo">TEAM IGOGO ACTION DASHBOARD</span>
+    <button class="month-btn active" data-month="2026-06" onclick="changeMonth('2026-06')">6월</button>
+    <button class="month-btn" data-month="2026-07" onclick="changeMonth('2026-07')">7월</button>
+    <button class="month-btn" data-month="2026-08" onclick="changeMonth('2026-08')">8월</button>
+    <button class="month-btn" data-month="2026-09" onclick="changeMonth('2026-09')">9월</button>
+    <button class="month-btn" data-month="2026-10" onclick="changeMonth('2026-10')">10월</button>
+    <button class="month-btn" data-month="2026-11" onclick="changeMonth('2026-11')">11월</button>
+    <button class="month-btn" data-month="2026-12" onclick="changeMonth('2026-12')">12월</button>
+    <div class="topbar-right">
+      <div class="user-chip">
+        <div id="user-avatar"></div>
+        <div>
+          <div id="user-name"></div>
+          <div id="user-role"></div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="dash-header">
+      <div class="dash-phrase" id="month-phrase"></div>
+      <div class="dash-name-row">
+        <span class="dash-name" id="dashboard-name" id="dashboard-accent"></span>
+        <span class="dash-role" id="dashboard-role"></span>
+        <span class="dash-month" id="dashboard-month"></span>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num" id="stat-total">—</div><div class="stat-lbl">전체 항목</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-done" style="color:var(--green)">—</div><div class="stat-lbl">완료</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-doing" style="color:var(--yellow)">—</div><div class="stat-lbl">진행중</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-pct" style="color:#4f8aff">—</div><div class="stat-lbl">달성률</div></div>
+      </div>
+      <div class="overall-bar"><div id="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div id="dashboard-content"></div>
+  </div>
+</div>
+
+</body>
+</html>
