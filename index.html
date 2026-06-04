@@ -11,7 +11,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot }
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot, enableNetwork, waitForPendingWrites }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   // ══════════════════════════════════════════
@@ -96,7 +96,7 @@
     document.getElementById("user-avatar").textContent = currentMember.name[0];
 
     if (currentMember.isAdmin) {
-      loadAdminView();
+      setTimeout(function(){ loadAdminView(); }, 500);
     } else {
       loadMemberDashboard();
     }
@@ -268,22 +268,34 @@
     const members = Object.entries(TEAM_MEMBERS).filter(function(e){ return !e[1].isAdmin; });
     const allData = [];
 
+    // Firestore 네트워크 연결 확보 후 읽기
+    try { await enableNetwork(db); } catch(e) {}
+
     for (var mi = 0; mi < members.length; mi++) {
       var email  = members[mi][0];
       var info   = members[mi][1];
       var safeId = "mbr_" + email.replace(/[^a-zA-Z0-9]/g, "_");
       var items  = getItemsForMember(email);
       var memos  = {};
-      try {
-        var docRef = doc(db, "dashboards", email, "months", currentMonth);
-        var snap   = await getDoc(docRef);
-        if (snap.exists()) {
-          var d = snap.data();
-          if (d.items && d.items.length > 0) { items = d.items; }
-          memos = d.memos || {};
+
+      // 최대 3회 재시도
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          var docRef = doc(db, "dashboards", email, "months", currentMonth);
+          var snap   = await getDoc(docRef);
+          if (snap.exists()) {
+            var d = snap.data();
+            if (d.items && d.items.length > 0) { items = d.items; }
+            memos = d.memos || {};
+          }
+          break; // 성공하면 재시도 중단
+        } catch(err) {
+          if (attempt < 2) {
+            await new Promise(function(r){ setTimeout(r, 800); }); // 0.8초 대기 후 재시도
+          } else {
+            console.warn("read failed after retries:", email, err.message);
+          }
         }
-      } catch(err) {
-        console.warn("read failed:", email, err.message);
       }
       allData.push({ email: email, safeId: safeId, info: info, items: items, memos: memos });
     }
