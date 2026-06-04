@@ -282,6 +282,9 @@
   // ══════════════════════════════════════════════
   //  관리자 뷰
   // ══════════════════════════════════════════════
+  // ══════════════════════════════════════════════
+  //  관리자 뷰
+  // ══════════════════════════════════════════════
   async function loadAdminView() {
     document.getElementById("dashboard-name").textContent = "팀 전체 현황";
     document.getElementById("dashboard-role").textContent = "리더 뷰";
@@ -290,45 +293,37 @@
 
     const members = Object.entries(TEAM_MEMBERS).filter(function(e){ return !e[1].isAdmin; });
 
-    // Firestore 네트워크 연결 확보 후 읽기
     try { await enableNetwork(db); } catch(e) {}
 
-    for (var mi = 0; mi < members.length; mi++) {
-      var email  = members[mi][0];
-      var info   = members[mi][1];
-      var safeId = "mbr_" + email.replace(/[^a-zA-Z0-9]/g, "_");
-      var items  = getItemsForMember(email);
-      var memos  = {};
-
-      // 최대 3회 재시도
-      for (var attempt = 0; attempt < 3; attempt++) {
-        try {
-          var docRef = doc(db, "dashboards", email, "months", currentMonth);
-          var snap   = await getDoc(docRef);
+    // 6명 동시 병렬 읽기
+    const allData = await Promise.all(members.map(function(m) {
+      const email   = m[0];
+      const info    = m[1];
+      const safeId  = "mbr_" + email.replace(/[^a-zA-Z0-9]/g, "_");
+      const defItems = currentMonth === "2026-06" ? getItemsForMember(email) : [];
+      return getDocFromServer(doc(db, "dashboards", email, "months", currentMonth))
+        .then(function(snap) {
+          var items = defItems, memos = {};
           if (snap.exists()) {
             var d = snap.data();
-            if (d.items && d.items.length > 0) { items = d.items; }
+            if (d.items && d.items.length > 0) items = d.items;
             memos = d.memos || {};
           }
-          break; // 성공하면 재시도 중단
-        } catch(err) {
-          if (attempt < 2) {
-            await new Promise(function(r){ setTimeout(r, 800); }); // 0.8초 대기 후 재시도
-          } else {
-            console.warn("read failed after retries:", email, err.message);
-          }
-        }
-      }
-      allData.push({ email: email, safeId: safeId, info: info, items: items, memos: memos });
-    }
+          return { email:email, safeId:safeId, info:info, items:items, memos:memos };
+        })
+        .catch(function() {
+          return { email:email, safeId:safeId, info:info, items:defItems, memos:{} };
+        });
+    }));
 
-    var totalAll = 0, doneAll = 0, doingAll = 0;
-    for (var i = 0; i < allData.length; i++) {
-      totalAll += allData[i].items.length;
-      doneAll  += allData[i].items.filter(function(x){ return x.status === "done";  }).length;
-      doingAll += allData[i].items.filter(function(x){ return x.status === "doing"; }).length;
-    }
-    var pctAll = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+    // 전체 통계
+    var totalAll=0, doneAll=0, doingAll=0;
+    allData.forEach(function(d) {
+      totalAll += d.items.length;
+      doneAll  += d.items.filter(function(x){ return x.status==="done";  }).length;
+      doingAll += d.items.filter(function(x){ return x.status==="doing"; }).length;
+    });
+    var pctAll = totalAll ? Math.round(doneAll/totalAll*100) : 0;
     document.getElementById("stat-total").textContent = totalAll;
     document.getElementById("stat-done").textContent  = doneAll;
     document.getElementById("stat-doing").textContent = doingAll;
@@ -343,115 +338,91 @@
     grid.className = "admin-grid";
     container.appendChild(grid);
 
-    for (var ci = 0; ci < allData.length; ci++) {
-      (function(d) {
-        var done  = d.items.filter(function(x){ return x.status === "done";  }).length;
-        var doing = d.items.filter(function(x){ return x.status === "doing"; }).length;
-        var total = d.items.length;
-        var pct   = total ? Math.round(done / total * 100) : 0;
+    allData.forEach(function(d) {
+      var done  = d.items.filter(function(x){ return x.status==="done";  }).length;
+      var doing = d.items.filter(function(x){ return x.status==="doing"; }).length;
+      var total = d.items.length;
+      var pct   = total ? Math.round(done/total*100) : 0;
 
-        var card = document.createElement("div");
-        card.className = "admin-card";
-
-        var top = document.createElement("div");
-        top.className = "admin-card-top";
-        top.innerHTML =
+      var card = document.createElement("div");
+      card.className = "admin-card";
+      card.innerHTML =
+        "<div class='admin-card-top'>" +
           "<div class='admin-avatar' style='background:" + d.info.color + ";color:#0d0f14'>" + d.info.name[0] + "</div>" +
           "<div><div class='admin-name'>" + d.info.name + "</div><div class='admin-role'>" + d.info.role + "</div></div>" +
-          "<div class='admin-pct' style='color:" + d.info.color + "'>" + pct + "%</div>";
-
-        var barWrap = document.createElement("div");
-        barWrap.className = "admin-bar-wrap";
-        barWrap.innerHTML = "<div class='admin-bar'><div class='admin-bar-fill' style='width:" + pct + "%;background:" + d.info.color + "'></div></div>";
-
-        var stats = document.createElement("div");
-        stats.className = "admin-stats";
-        stats.innerHTML =
+          "<div class='admin-pct' style='color:" + d.info.color + "'>" + pct + "%</div>" +
+        "</div>" +
+        "<div class='admin-bar-wrap'><div class='admin-bar'><div class='admin-bar-fill' style='width:" + pct + "%;background:" + d.info.color + "'></div></div></div>" +
+        "<div class='admin-stats'>" +
           "<span>전체 <b>" + total + "</b></span>" +
-          "<span style='color:#34d97b'>완료 <b>" + done  + "</b></span>" +
+          "<span style='color:#34d97b'>완료 <b>" + done + "</b></span>" +
           "<span style='color:#f5c842'>진행중 <b>" + doing + "</b></span>" +
-          "<span style='color:#8890a4'>미완 <b>" + (total - done - doing) + "</b></span>";
-
-        var hint = document.createElement("div");
-        hint.className = "card-expand-hint";
-        hint.textContent = "클릭하여 액션아이템 보기";
-
-        card.appendChild(top);
-        card.appendChild(barWrap);
-        card.appendChild(stats);
-        card.appendChild(hint);
-        card.addEventListener("click", function() { window.toggleMemberDetail(d.safeId); });
-        grid.appendChild(card);
-      })(allData[ci]);
-    }
+          "<span style='color:#8890a4'>미완 <b>" + (total-done-doing) + "</b></span>" +
+        "</div>" +
+        "<div class='card-expand-hint'>클릭하여 액션아이템 보기</div>";
+      card.addEventListener("click", (function(id){ return function(){ window.toggleMemberDetail(id); }; })(d.safeId));
+      grid.appendChild(card);
+    });
 
     // 팀원별 상세 블록
-    for (var bi = 0; bi < allData.length; bi++) {
-      (function(d) {
-        var done  = d.items.filter(function(x){ return x.status === "done"; }).length;
-        var total = d.items.length;
+    allData.forEach(function(d) {
+      var done  = d.items.filter(function(x){ return x.status==="done"; }).length;
+      var total = d.items.length;
+      var block = document.createElement("div");
+      block.className = "member-detail-block";
+      block.id = d.safeId;
 
-        var block = document.createElement("div");
-        block.className = "member-detail-block";
-        block.id = d.safeId;
+      var hdr = document.createElement("div");
+      hdr.style.cssText = "display:flex;align-items:center;padding:12px 16px;border-left:3px solid " + d.info.color + ";background:var(--surface2);border-radius:8px;margin-bottom:16px";
+      hdr.innerHTML =
+        "<div class='admin-avatar' style='background:" + d.info.color + ";color:#0d0f14;width:28px;height:28px;font-size:12px;margin-right:10px'>" + d.info.name[0] + "</div>" +
+        "<span style='color:" + d.info.color + ";font-weight:700;font-size:16px'>" + d.info.name + "</span>" +
+        "<span style='color:#8890a4;margin-left:8px;font-size:13px'>" + d.info.role + "</span>" +
+        "<span style='font-family:var(--mono);font-size:12px;margin-left:auto;color:" + d.info.color + "'>" + (total ? Math.round(done/total*100) : 0) + "% 완료</span>";
+      block.appendChild(hdr);
 
-        var hdr = document.createElement("div");
-        hdr.style.cssText = "display:flex;align-items:center;padding:12px 16px;border-left:3px solid " + d.info.color + ";background:var(--surface2);border-radius:8px;margin-bottom:16px";
-        hdr.innerHTML =
-          "<div class='admin-avatar' style='background:" + d.info.color + ";color:#0d0f14;width:28px;height:28px;font-size:12px;margin-right:10px'>" + d.info.name[0] + "</div>" +
-          "<span style='color:" + d.info.color + ";font-weight:700;font-size:16px'>" + d.info.name + "</span>" +
-          "<span style='color:#8890a4;margin-left:8px;font-size:13px'>" + d.info.role + "</span>" +
-          "<span style='font-family:var(--mono);font-size:12px;margin-left:auto;color:" + d.info.color + "'>" + (total ? Math.round(done/total*100) : 0) + "% 완료</span>";
-        block.appendChild(hdr);
+      var sections = {};
+      d.items.forEach(function(item) {
+        if (!sections[item.section]) sections[item.section] = [];
+        sections[item.section].push(item);
+      });
 
-        var sections = {};
-        d.items.forEach(function(item) {
-          if (!sections[item.section]) sections[item.section] = [];
-          sections[item.section].push(item);
-        });
-
-        Object.entries(sections).forEach(function(se) {
-          var secName  = se[0];
-          var sItems   = se[1];
-          var secEl    = document.createElement("div");
-          secEl.className = "section";
-          secEl.style.marginBottom = "16px";
-
-          var secHdr = document.createElement("div");
-          secHdr.className = "section-header";
-          secHdr.innerHTML =
+      Object.entries(sections).forEach(function(se) {
+        var secEl = document.createElement("div");
+        secEl.className = "section";
+        secEl.style.marginBottom = "16px";
+        secEl.innerHTML =
+          "<div class='section-header'>" +
             "<span class='section-dot' style='background:" + d.info.color + "'></span>" +
-            "<span class='section-title'>" + secName + "</span>" +
-            "<span class='section-count'>" + sItems.filter(function(x){ return x.status==="done"; }).length + "/" + sItems.length + "</span>";
-          secEl.appendChild(secHdr);
+            "<span class='section-title'>" + se[0] + "</span>" +
+            "<span class='section-count'>" + se[1].filter(function(x){ return x.status==="done"; }).length + "/" + se[1].length + "</span>" +
+          "</div>";
 
-          sItems.forEach(function(item) {
-            var s      = item.status || "todo";
-            var label  = { todo:"진행전", doing:"진행중", done:"완료", hold:"보류" }[s];
-            var memo   = d.memos[item.id] || "";
-            var bcol   = s==="done" ? "#34d97b" : s==="doing" ? "#f5c842" : "#3a3f55";
-            var bgcol  = s==="done" ? "#34d97b" : s==="doing" ? "#f5c842" : "transparent";
-            var check  = s==="done" ? "<svg viewBox='0 0 10 10' width='10' height='10'><path d='M1.5 5l2.5 2.5 4.5-5' stroke='#0d0f14' stroke-width='2' fill='none' stroke-linecap='round'/></svg>" : "";
-            var tagH   = item.tag      ? "<span class='item-tag'>"                              + item.tag      + "</span>" : "";
-            var prioH  = item.priority ? "<span class='prio-badge prio-" + item.priority + "'>" + item.priority + "순위</span>" : "";
-            var memoH  = memo          ? "<div class='admin-memo'>\uD83D\uDCAC " + memo + "</div>" : "";
-
-            var itemEl = document.createElement("div");
-            itemEl.className = "item-card " + s;
-            itemEl.innerHTML =
-              "<div class='item-header'>" +
-                "<div class='status-btn' style='border-color:" + bcol + ";background:" + bgcol + "'>" + check + "</div>" +
-                "<span class='item-label" + (s==="done" ? " done-text" : "") + "'>" + item.label + "</span>" +
-                tagH + prioH +
-                "<span class='status-text " + s + "'>" + label + "</span>" +
-              "</div>" + memoH;
-            secEl.appendChild(itemEl);
-          });
-          block.appendChild(secEl);
+        se[1].forEach(function(item) {
+          var s     = item.status || "todo";
+          var label = {todo:"진행전",doing:"진행중",done:"완료",hold:"보류"}[s];
+          var memo  = d.memos[item.id] || "";
+          var bc    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"#3a3f55";
+          var bg    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"transparent";
+          var chk   = s==="done"?"<svg viewBox='0 0 10 10' width='10' height='10'><path d='M1.5 5l2.5 2.5 4.5-5' stroke='#0d0f14' stroke-width='2' fill='none' stroke-linecap='round'/></svg>":"";
+          var tagH  = item.tag      ? "<span class='item-tag'>" + item.tag + "</span>" : "";
+          var prioH = item.priority ? "<span class='prio-badge prio-" + item.priority + "'>" + item.priority + "순위</span>" : "";
+          var memoH = memo          ? "<div class='admin-memo'>&#128172; " + memo + "</div>" : "";
+          var el = document.createElement("div");
+          el.className = "item-card " + s;
+          el.innerHTML =
+            "<div class='item-header'>" +
+              "<div class='status-btn' style='border-color:" + bc + ";background:" + bg + "'>" + chk + "</div>" +
+              "<span class='item-label" + (s==="done"?" done-text":"") + "'>" + item.label + "</span>" +
+              tagH + prioH +
+              "<span class='status-text " + s + "'>" + label + "</span>" +
+            "</div>" + memoH;
+          secEl.appendChild(el);
         });
-        container.appendChild(block);
-      })(allData[bi]);
-    }
+        block.appendChild(secEl);
+      });
+      container.appendChild(block);
+    });
   }
 
   window.toggleMemberDetail = function(id) {
@@ -461,10 +432,9 @@
     document.querySelectorAll(".member-detail-block").forEach(function(b){ b.classList.remove("open"); });
     if (!isOpen) {
       el.classList.add("open");
-      setTimeout(function(){ el.scrollIntoView({ behavior:"smooth", block:"start" }); }, 50);
+      setTimeout(function(){ el.scrollIntoView({behavior:"smooth",block:"start"}); }, 50);
     }
   };
-
 
   window.viewMemberDetail = async (email) => {
     const info = TEAM_MEMBERS[email];
