@@ -120,13 +120,20 @@
     // 실시간 리스닝
     if (unsubscribe) unsubscribe();
     unsubscribe = onSnapshot(docRef, snap => {
-      dashboardData = snap.exists() ? snap.data() : getInitialData(email);
+      if (snap.exists()) {
+        dashboardData = snap.data();
+      } else {
+        dashboardData = getInitialData(email);
+      }
       renderDashboard();
     });
   }
 
   function getInitialData(email) {
-    return { items: getItemsForMember(email), memos: {}, retro: {}, updatedAt: null };
+    if (currentMonth === "2026-06") {
+      return { items: getItemsForMember(email), memos: {}, retro: {}, updatedAt: null };
+    }
+    return { items: [], memos: {}, retro: {}, updatedAt: null };
   }
 
   // ── 아이템 렌더 ──────────────────────────────
@@ -134,6 +141,22 @@
     const items = dashboardData.items || [];
     const memos = dashboardData.memos || {};
     const retro = dashboardData.retro || {};
+
+    // 해당 월 데이터 없으면 빈 화면
+    if (items.length === 0 && currentMonth !== "2026-06") {
+      document.getElementById("stat-total").textContent  = "—";
+      document.getElementById("stat-done").textContent   = "—";
+      document.getElementById("stat-doing").textContent  = "—";
+      document.getElementById("stat-pct").textContent    = "—";
+      document.getElementById("progress-fill").style.width = "0%";
+      document.getElementById("dashboard-content").innerHTML =
+        '<div style="text-align:center;padding:80px 20px;color:var(--gray)">' +
+        '<div style="font-size:32px;margin-bottom:16px">📋</div>' +
+        '<div style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:8px">' + currentMonth.replace("2026-","") + '월 액션아이템 준비 중</div>' +
+        '<div style="font-size:13px;line-height:1.8">이 달의 액션아이템은 아직 등록되지 않았습니다.<br>팀 리더가 다음 달 아이템을 추가하면 여기에 표시됩니다.</div>' +
+        '</div>';
+      return;
+    }
 
     const done   = items.filter(i => i.status === "done").length;
     const doing  = items.filter(i => i.status === "doing").length;
