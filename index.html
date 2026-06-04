@@ -266,20 +266,37 @@
     document.getElementById("month-phrase").textContent = MONTH_PHRASE;
 
     const members = Object.entries(TEAM_MEMBERS).filter(([,v]) => !v.isAdmin);
-    let html = `<div class="admin-grid">`;
+    const allData = [];
 
     for (const [email, info] of members) {
       const docRef = doc(db, "dashboards", email, "months", currentMonth);
       const snap = await getDoc(docRef);
-      const data = snap.exists() ? snap.data() : { items: getItemsForMember(email) };
-      const items = data.items || [];
-      const done = items.filter(i => i.status === "done").length;
-      const doing = items.filter(i => i.status === "doing").length;
-      const total = items.length;
-      const pct = total ? Math.round(done / total * 100) : 0;
+      const data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
+      const items = data.items || getItemsForMember(email);
+      const memos = data.memos || {};
+      allData.push({ email, info, items, memos });
+    }
 
+    // ── 전체 팀 통계
+    const totalAll  = allData.reduce((s, d) => s + d.items.length, 0);
+    const doneAll   = allData.reduce((s, d) => s + d.items.filter(i=>i.status==='done').length, 0);
+    const doingAll  = allData.reduce((s, d) => s + d.items.filter(i=>i.status==='doing').length, 0);
+    const pctAll    = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+    document.getElementById("stat-total").textContent = totalAll;
+    document.getElementById("stat-done").textContent  = doneAll;
+    document.getElementById("stat-doing").textContent = doingAll;
+    document.getElementById("stat-pct").textContent   = pctAll + "%";
+    document.getElementById("progress-fill").style.width = pctAll + "%";
+
+    // ── 요약 카드 그리드
+    let html = `<div class="admin-grid">`;
+    for (const { email, info, items } of allData) {
+      const done  = items.filter(i=>i.status==='done').length;
+      const doing = items.filter(i=>i.status==='doing').length;
+      const total = items.length;
+      const pct   = total ? Math.round(done/total*100) : 0;
       html += `
-      <div class="admin-card" onclick="viewMemberDetail('${email}')">
+      <div class="admin-card" onclick="toggleMemberDetail('detail-${email.split('@')[0]}')">
         <div class="admin-card-top">
           <div class="admin-avatar" style="background:${info.color};color:#0d0f14">${info.name[0]}</div>
           <div>
@@ -297,16 +314,72 @@
           <span style="color:#f5c842">진행중 <b>${doing}</b></span>
           <span style="color:#8890a4">미완 <b>${total-done-doing}</b></span>
         </div>
+        <div class="card-expand-hint">클릭하여 액션아이템 보기 ▾</div>
       </div>`;
     }
     html += `</div>`;
+
+    // ── 팀원별 상세 아이템 리스트 (접힌 상태로)
+    for (const { email, info, items, memos } of allData) {
+      const done  = items.filter(i=>i.status==='done').length;
+      const total = items.length;
+      const sections = {};
+      items.forEach(item => {
+        if (!sections[item.section]) sections[item.section] = [];
+        sections[item.section].push(item);
+      });
+
+      html += `
+      <div class="member-detail-block" id="detail-${email.split('@')[0]}">
+        <div class="member-detail-header" style="border-left:3px solid ${info.color}">
+          <div class="admin-avatar" style="background:${info.color};color:#0d0f14;width:28px;height:28px;font-size:12px;margin-right:10px">${info.name[0]}</div>
+          <span style="color:${info.color};font-weight:700;font-size:16px">${info.name}</span>
+          <span style="color:#8890a4;margin-left:8px;font-size:13px">${info.role}</span>
+          <span style="font-family:var(--mono);font-size:12px;margin-left:auto;color:${info.color}">${total?Math.round(done/total*100):0}% 완료</span>
+        </div>`;
+
+      Object.entries(sections).forEach(([section, sItems]) => {
+        html += `<div class="section" style="margin-bottom:16px">
+          <div class="section-header">
+            <span class="section-dot" style="background:${info.color}"></span>
+            <span class="section-title">${section}</span>
+            <span class="section-count">${sItems.filter(i=>i.status==='done').length}/${sItems.length}</span>
+          </div>`;
+        sItems.forEach(item => {
+          const s = item.status || 'todo';
+          const statusLabel = {todo:'진행전', doing:'진행중', done:'완료', hold:'보류'}[s];
+          const memo = memos[item.id] || '';
+          html += `
+          <div class="item-card ${s}">
+            <div class="item-header">
+              <div class="status-btn" style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
+                ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>':''}
+              </div>
+              <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
+              ${item.tag?`<span class="item-tag">${item.tag}</span>`:''}
+              ${item.priority?`<span class="prio-badge prio-${item.priority}">${item.priority}순위</span>`:''}
+              <span class="status-text ${s}">${statusLabel}</span>
+            </div>
+            ${memo?`<div class="admin-memo">💬 ${memo}</div>`:''}
+          </div>`;
+        });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
     document.getElementById("dashboard-content").innerHTML = html;
-    document.getElementById("stat-total").textContent = members.length;
-    document.getElementById("stat-done").textContent  = "—";
-    document.getElementById("stat-doing").textContent = "—";
-    document.getElementById("stat-pct").textContent   = "팀원";
-    document.getElementById("progress-fill").style.width = "100%";
   }
+
+  window.toggleMemberDetail = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isOpen = el.classList.contains('open');
+    // 모두 닫기
+    document.querySelectorAll('.member-detail-block').forEach(b => b.classList.remove('open'));
+    if (!isOpen) el.classList.add('open');
+    if (!isOpen) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   window.viewMemberDetail = async (email) => {
     const info = TEAM_MEMBERS[email];
@@ -523,7 +596,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   padding:0 32px; height:56px; display:flex; align-items:center; gap:16px;
   position:sticky; top:0; z-index:100;
 }
-.topbar-logo { font-family:var(--mono); font-size:12px; color:#4f8aff; letter-spacing:0.12em; margin-right:8px; }
+.topbar-logo { font-family:var(--mono); font-size:11px; color:#4f8aff; letter-spacing:0.08em; margin-right:8px; font-weight:500; }
 .month-btn {
   font-family:var(--mono); font-size:11px; padding:5px 12px; border-radius:6px;
   border:1px solid var(--border); background:transparent; color:var(--gray);
@@ -618,6 +691,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .back-btn { font-size:12px; color:#4f8aff; cursor:pointer; margin-bottom:16px; display:inline-block; }
 .back-btn:hover { text-decoration:underline; }
 .member-detail-header { display:flex; align-items:center; padding:12px 16px; border-left:3px solid; background:var(--surface2); border-radius:8px; margin-bottom:16px; }
+
+.member-detail-block { display:none; margin-bottom:28px; }
+.member-detail-block.open { display:block; }
+.card-expand-hint { font-size:10px; color:var(--gray); text-align:right; margin-top:8px; font-family:var(--mono); }
+.admin-card:hover .card-expand-hint { color:#4f8aff; }
+
 .admin-memo { font-size:12px; color:var(--gray); padding:6px 16px 10px 46px; line-height:1.6; font-style:italic; }
 </style>
 </head>
@@ -645,10 +724,14 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 <!-- ── 앱 화면 ── -->
 <div id="app-screen">
   <div class="topbar">
-    <span class="topbar-logo">IGOGO</span>
+    <span class="topbar-logo">TEAM IGOGO ACTION DASHBOARD</span>
     <button class="month-btn active" data-month="2026-06" onclick="changeMonth('2026-06')">6월</button>
     <button class="month-btn" data-month="2026-07" onclick="changeMonth('2026-07')">7월</button>
     <button class="month-btn" data-month="2026-08" onclick="changeMonth('2026-08')">8월</button>
+    <button class="month-btn" data-month="2026-09" onclick="changeMonth('2026-09')">9월</button>
+    <button class="month-btn" data-month="2026-10" onclick="changeMonth('2026-10')">10월</button>
+    <button class="month-btn" data-month="2026-11" onclick="changeMonth('2026-11')">11월</button>
+    <button class="month-btn" data-month="2026-12" onclick="changeMonth('2026-12')">12월</button>
     <div class="topbar-right">
       <div class="user-chip">
         <div id="user-avatar"></div>
