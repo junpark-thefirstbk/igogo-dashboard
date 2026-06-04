@@ -11,7 +11,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot, enableNetwork, waitForPendingWrites }
+  import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, collection, getDocs, onSnapshot, enableNetwork }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   // ══════════════════════════════════════════
@@ -470,7 +470,7 @@
   window.viewMemberDetail = async (email) => {
     const info = TEAM_MEMBERS[email];
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
-    const snap = await getDoc(docRef);
+    const snap = await getDocFromServer(docRef);
     const data = snap.exists() ? snap.data() : { items: getItemsForMember(email) };
     const items = data.items || [];
     const memos = data.memos || {};
