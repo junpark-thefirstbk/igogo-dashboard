@@ -225,8 +225,8 @@
             <div class="status-btn" onclick="event.stopPropagation();cycleStatus('${item.id}')"
               style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};
                      background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
-              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'
-                         :(s==='doing'?'<div style="width:6px;height:6px;border-radius:50%;background:#0d0f14;margin:auto"></div>':'')}
+              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'
+                         :(s==='doing'?'<div style="width:6px;height:6px;border-radius:50%;background:#ffffff;margin:auto"></div>':'')}
             </div>
             <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
             ${item.tag?`<span class="item-tag">${item.tag}</span>`:''}
@@ -374,7 +374,7 @@
       card.className = "admin-card";
       card.innerHTML =
         "<div class='admin-card-top'>" +
-          "<div class='admin-avatar' style='background:" + d.info.color + ";color:#0d0f14'>" + d.info.name[0] + "</div>" +
+          "<div class='admin-avatar' style='background:" + d.info.color + ";color:#ffffff'>" + d.info.name[0] + "</div>" +
           "<div><div class='admin-name'>" + d.info.name + "</div><div class='admin-role'>" + d.info.role + "</div></div>" +
           "<div class='admin-pct' style='color:" + d.info.color + "'>" + pct + "%</div>" +
         "</div>" +
@@ -399,11 +399,11 @@
       block.id = d.safeId;
 
       var hdr = document.createElement("div");
-      hdr.style.cssText = "display:flex;align-items:center;padding:12px 16px;border-left:3px solid " + d.info.color + ";background:var(--surface2);border-radius:8px;margin-bottom:16px";
+      hdr.style.cssText = "display:flex;align-items:center;padding:12px 16px;border-left:3px solid " + d.info.color + ";background:#f0f2f7;border-radius:8px;margin-bottom:16px";
       hdr.innerHTML =
-        "<div class='admin-avatar' style='background:" + d.info.color + ";color:#0d0f14;width:28px;height:28px;font-size:12px;margin-right:10px'>" + d.info.name[0] + "</div>" +
+        "<div class='admin-avatar' style='background:" + d.info.color + ";color:#ffffff;width:28px;height:28px;font-size:12px;margin-right:10px'>" + d.info.name[0] + "</div>" +
         "<span style='color:" + d.info.color + ";font-weight:700;font-size:16px'>" + d.info.name + "</span>" +
-        "<span style='color:#8890a4;margin-left:8px;font-size:13px'>" + d.info.role + "</span>" +
+        "<span style='color:#4a5068;margin-left:8px;font-size:13px'>" + d.info.role + "</span>" +
         "<span style='font-family:var(--mono);font-size:12px;margin-left:auto;color:" + d.info.color + "'>" + (total ? Math.round(done/total*100) : 0) + "% 완료</span>";
       block.appendChild(hdr);
 
@@ -430,7 +430,7 @@
           var memo  = d.memos[item.id] || "";
           var bc    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"#3a3f55";
           var bg    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"transparent";
-          var chk   = s==="done"?"<svg viewBox='0 0 10 10' width='10' height='10'><path d='M1.5 5l2.5 2.5 4.5-5' stroke='#0d0f14' stroke-width='2' fill='none' stroke-linecap='round'/></svg>":"";
+          var chk   = s==="done"?"<svg viewBox='0 0 10 10' width='10' height='10'><path d='M1.5 5l2.5 2.5 4.5-5' stroke='#ffffff' stroke-width='2' fill='none' stroke-linecap='round'/></svg>":"";
           var tagH  = item.tag      ? "<span class='item-tag'>" + item.tag + "</span>" : "";
           var prioH = item.priority ? "<span class='prio-badge prio-" + item.priority + "'>" + item.priority + "순위</span>" : "";
           var memoH = memo          ? "<div class='admin-memo'>&#128172; " + memo + "</div>" : "";
@@ -478,7 +478,7 @@
     <div class="back-btn" onclick="${currentMember.isAdmin?'loadAdminView()':''}">← 전체 현황으로</div>
     <div class="member-detail-header" style="border-left:3px solid ${info.color}">
       <span style="color:${info.color};font-weight:700;font-size:18px">${info.name}</span>
-      <span style="color:#8890a4;margin-left:8px">${info.role}</span>
+      <span style="color:#4a5068;margin-left:8px">${info.role}</span>
       <span style="font-family:var(--mono);font-size:12px;margin-left:auto;color:${info.color}">${total?Math.round(done/total*100):0}% 완료</span>
     </div>`;
 
@@ -501,7 +501,7 @@
           <div class="item-header">
             <div class="status-btn" style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};
               background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
-              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#0d0f14" stroke-width="2" fill="none" stroke-linecap="round"/></svg>':''}
+              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>':''}
             </div>
             <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
             <span class="status-text ${s}">${{todo:'진행전',doing:'진행중',done:'완료',hold:'보류'}[s]}</span>
@@ -617,13 +617,13 @@
 
 <style>
 :root {
-  --bg: #0d0f14;
-  --surface: #141720;
-  --surface2: #1c2030;
-  --border: #2a2f42;
-  --gray: #8890a4;
-  --text: #e8eaf0;
-  --text2: #adb3c8;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface2: #f0f2f7;
+  --border: #e2e5ed;
+  --gray: #4a5068;
+  --text: #0f1117;
+  --text2: #1a1d27;
   --mono: 'DM Mono', monospace;
   --sans: 'Noto Sans KR', sans-serif;
   --green: #34d97b;
@@ -681,7 +681,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .month-btn.active, .month-btn:hover { border-color:#4f8aff; color:#4f8aff; background:rgba(79,138,255,0.08); }
 .topbar-right { margin-left:auto; display:flex; align-items:center; gap:12px; }
 .user-chip { display:flex; align-items:center; gap:8px; }
-#user-avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#0d0f14; }
+#user-avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#ffffff; }
 #user-name { font-size:13px; font-weight:500; }
 #user-role { font-size:11px; color:var(--gray); }
 
@@ -732,14 +732,14 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 /* ── ITEM CARD ── */
 .item-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; overflow:hidden; transition:border-color 0.2s; }
 .item-card:hover { border-color:rgba(65,116,246,0.4); box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-.item-card.done { opacity:0.65; }
+.item-card.done { opacity:0.85; }
 .item-header { display:flex; align-items:center; gap:10px; padding:13px 16px; cursor:pointer; }
 .status-btn {
   width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
   flex-shrink:0; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center;
 }
-.item-label { flex:1; font-size:13px; font-weight:500; color:#0f1117; }
-.item-label.done-text { text-decoration:line-through; color:var(--gray); }
+.item-label { flex:1; font-size:13px; font-weight:500; color:#0f1117 !important; }
+.item-label.done-text { text-decoration:line-through; color:#9ca3af !important; }
 .item-tag { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; background:rgba(79,138,255,0.1); color:#4f8aff; flex-shrink:0; }
 .prio-badge { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; flex-shrink:0; }
 .prio-1 { background:rgba(255,92,92,0.12); color:var(--red); }
@@ -747,17 +747,17 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .prio-3 { background:rgba(79,138,255,0.12); color:#4f8aff; }
 .prio-4 { background:rgba(136,144,164,0.12); color:var(--gray); }
 .status-text { font-family:var(--mono); font-size:10px; flex-shrink:0; }
-.status-text.todo { color:var(--gray); }
-.status-text.doing { color:var(--yellow); }
-.status-text.done { color:var(--green); }
-.status-text.hold { color:var(--red); }
+.status-text.todo { color:#6b7280; }
+.status-text.doing { color:#b45309; }
+.status-text.done { color:#15803d; }
+.status-text.hold { color:#dc2626; }
 
 .item-body { display:none; padding:0 16px 14px 46px; }
 .item-body.open { display:block; }
 .item-desc { font-size:12px; color:var(--text2); margin-bottom:10px; line-height:1.7; }
 .memo-area { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
 .memo-label { font-family:var(--mono); font-size:10px; color:#1a1d27; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; font-weight:600; }
-.memo-input { width:100%; background:transparent; border:none; outline:none; color:var(--text2); font-family:var(--sans); font-size:13px; resize:vertical; min-height:56px; line-height:1.7; }
+.memo-input { width:100%; background:transparent; border:none; outline:none; color:#0f1117; font-family:var(--sans); font-size:13px; resize:vertical; min-height:56px; line-height:1.7; }
 .memo-input::placeholder { color:var(--border); }
 
 /* ── RETRO ── */
