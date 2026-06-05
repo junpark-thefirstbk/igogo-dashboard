@@ -198,7 +198,8 @@
     document.getElementById("dashboard-name").textContent = currentMember.name;
     document.getElementById("dashboard-role").textContent = currentMember.role;
     document.getElementById("dashboard-month").textContent = currentMonth;
-    document.getElementById("dashboard-accent").style.color = currentMember.color;
+    var accentEl = document.getElementById("dashboard-name");
+    if (accentEl) accentEl.style.color = currentMember.color;
 
     // 섹션별 그룹
     const sections = {};
@@ -833,7 +834,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
     <div class="dash-header">
       <div class="dash-phrase" id="month-phrase"></div>
       <div class="dash-name-row">
-        <span class="dash-name" id="dashboard-name" id="dashboard-accent"></span>
+        <span class="dash-name" id="dashboard-name"></span>
         <span class="dash-role" id="dashboard-role"></span>
         <span class="dash-month" id="dashboard-month"></span>
       </div>
