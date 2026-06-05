@@ -382,7 +382,7 @@
           "<span>전체 <b>" + total + "</b></span>" +
           "<span style='color:#34d97b'>완료 <b>" + done + "</b></span>" +
           "<span style='color:#f5c842'>진행중 <b>" + doing + "</b></span>" +
-          "<span style='color:#8890a4'>미완 <b>" + (total-done-doing) + "</b></span>" +
+          "<span style='color:#d42b2b;font-weight:600'>미완 <b>" + (total-done-doing) + "</b></span>" +
         "</div>" +
         "<div class='card-expand-hint'>클릭하여 액션아이템 보기</div>";
       card.addEventListener("click", (function(id){ return function(){ window.toggleMemberDetail(id); }; })(d.safeId));
@@ -709,15 +709,15 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   border:1px solid var(--border); border-radius:12px; padding:24px 28px; margin-bottom:24px;
   box-shadow:0 2px 8px rgba(0,0,0,0.04);
 }
-.dash-phrase { font-size:12px; color:var(--text2); line-height:1.8; border-left:3px solid; border-color:inherit; padding-left:14px; margin-bottom:16px; }
+.dash-phrase { font-size:13px; color:#d42b2b; line-height:1.8; border-left:3px solid #d42b2b; padding-left:14px; margin-bottom:16px; font-weight:700; }
 .dash-name-row { display:flex; align-items:baseline; gap:10px; margin-bottom:16px; }
-.dash-name { font-size:22px; font-weight:700; }
-.dash-role { font-size:14px; color:var(--gray); }
-.dash-month { font-family:var(--mono); font-size:12px; color:var(--gray); margin-left:auto; }
+.dash-name { font-size:22px; font-weight:700; color:#0f1117; }
+.dash-role { font-size:14px; color:#1a1d27; font-weight:500; }
+.dash-month { font-family:var(--mono); font-size:12px; color:#1a1d27; margin-left:auto; font-weight:500; }
 .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:14px; }
 .stat-box { text-align:center; }
-.stat-num { font-family:var(--mono); font-size:26px; font-weight:500; }
-.stat-lbl { font-size:11px; color:var(--gray); margin-top:2px; }
+.stat-num { font-family:var(--mono); font-size:26px; font-weight:700; color:#0f1117; }
+.stat-lbl { font-size:11px; color:#0f1117; margin-top:2px; font-weight:500; }
 .overall-bar { height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
 #progress-fill { height:100%; background:linear-gradient(90deg,#4174f6,#6c4fef); border-radius:3px; transition:width 0.6s ease; }
 
@@ -725,8 +725,8 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .section { margin-bottom:28px; }
 .section-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
 .section-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.section-title { font-size:14px; font-weight:700; }
-.section-count { font-family:var(--mono); font-size:11px; color:var(--gray); margin-left:auto; }
+.section-title { font-size:14px; font-weight:700; color:#0f1117; }
+.section-count { font-family:var(--mono); font-size:11px; color:#1a1d27; margin-left:auto; font-weight:600; }
 
 /* ── ITEM CARD ── */
 .item-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; overflow:hidden; transition:border-color 0.2s; }
@@ -737,7 +737,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
   flex-shrink:0; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center;
 }
-.item-label { flex:1; font-size:13px; font-weight:500; }
+.item-label { flex:1; font-size:13px; font-weight:500; color:#0f1117; }
 .item-label.done-text { text-decoration:line-through; color:var(--gray); }
 .item-tag { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; background:rgba(79,138,255,0.1); color:#4f8aff; flex-shrink:0; }
 .prio-badge { font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:4px; flex-shrink:0; }
@@ -755,7 +755,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .item-body.open { display:block; }
 .item-desc { font-size:12px; color:var(--text2); margin-bottom:10px; line-height:1.7; }
 .memo-area { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
-.memo-label { font-family:var(--mono); font-size:10px; color:var(--gray); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; }
+.memo-label { font-family:var(--mono); font-size:10px; color:#1a1d27; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; font-weight:600; }
 .memo-input { width:100%; background:transparent; border:none; outline:none; color:var(--text2); font-family:var(--sans); font-size:13px; resize:vertical; min-height:56px; line-height:1.7; }
 .memo-input::placeholder { color:var(--border); }
 
@@ -772,9 +772,9 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .admin-card:hover { border-color:rgba(65,116,246,0.4); box-shadow:0 4px 16px rgba(65,116,246,0.12); transform:translateY(-1px); }
 .admin-card-top { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .admin-avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
-.admin-name { font-size:14px; font-weight:600; }
-.admin-role { font-size:11px; color:var(--gray); }
-.admin-pct { font-family:var(--mono); font-size:20px; font-weight:500; margin-left:auto; }
+.admin-name { font-size:14px; font-weight:700; color:#0f1117; }
+.admin-role { font-size:11px; color:#1a1d27; font-weight:500; }
+.admin-pct { font-family:var(--mono); font-size:20px; font-weight:700; margin-left:auto; }
 .admin-bar-wrap { margin-bottom:10px; }
 .admin-bar { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
 .admin-bar-fill { height:100%; border-radius:2px; transition:width 0.6s; }
