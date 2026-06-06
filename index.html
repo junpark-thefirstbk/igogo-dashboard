@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>아이고고 팀 대시보드</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAC+UlEQVR4nO2VT0gUYRjGn3dmdld3TdsWzaykJCow6GBZGCkeMvoDxcLsKakM9lQHD0UU9LWHvERBUGiFKGhU2h+osC5h0EnIIBUpLfKg21/cdred3XV35u2ghsWqoyld9gcDM8zwPs/3zvs9H5AmTZo0adKkWUCYmVgI6b+J/74XvLgmmJm4QiiMNrmzQigsOhUAeN3Ykfv+wr0d4yYWqRNTVzqVj+L2Gs3d8Dy2p/7zl1N3djOYGLObUOYqTkTc8+Slc+0jf7VFi24zLMpoPG/Jww8l2T15b6MKGJlsUXQAgADgm7lmytWkFBdCgg8YObtx5dLe0FOHJhWD5fESNgPBXP14V21p85qOoU0bzhzsYiEk8vmM2eqa/0/9xUTwGY6B8EVHWCpOJKOR0Aq+qRWgyYhE9OxvfHXzs5GiDWcOdr3yXreYETdtgJmJ2j06M9szYlyORMwwlmS8yWk95nW0Hq2Ju2y9FLUayd7hrSxYKnnnZ2Ym5tl3g6kZICJmML0Axkpl4xuAfIrHN3/3NJxQ7Fa7dURbD4UlqzPrE/nIYDB3d3dnWq1WG4DA5OykrG3GAACw2iZTu0cf9bYccg7FW/SfQZYz7QTDAJISwvnU96N2b+nqssY4wccAUgr+jekZoHaPzqoqL7tR3RoskC7JGQ5CTIshOZaIO5Xh0ZotVYVlhdFJv6brmv2QhZBw/jwHvS2nKTJWySRrOSPhA9CJQ8uVl3KW43GC9cDS5iNNIDAhdcvnbYAAsAyE910bzArI60K56E+4bH2uoZgHsSQgWQCXHcP789evrqkaZMES+WjhtqExYVZXJA32LMiK3B88Xe4NFDkOx7OVADIYAad+edXRXUPjGTC7+JwQE9n+9WT7zlj1rXMDVzqyJ999EG2Fkdr726f003Rnp0KqqsqqqspzMdWmCuvks5ns/2dYsMQVnQrjz0NpvqcfTVxcV1fn8vv9biLS3G733crKyuS0JiaCRQhREAqF9kWj0dH6+voH04XNTPwCQT9T2R4OB8QAAAAASUVORK5CYII=">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Noto+Serif+KR:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <!-- ✅ Firebase SDK -->
 <script type="module">
@@ -35,6 +35,7 @@
   // ── 팀원 정보 (관리자가 사전 정의) ──────────────────
   const TEAM_MEMBERS = {
     "moon@igogo.kr":   { name: "문수빈", role: "운영마케팅", color: "#4f8aff", isAdmin: false },
+    "hello@igogo.kr":  { name: "문수빈(QA)", role: "운영마케팅", color: "#4f8aff", isAdmin: false, qaFor: "moon@igogo.kr" },
     "ijkim@igogo.kr":    { name: "김일주", role: "디자인",     color: "#a78bfa", isAdmin: false },
     "sjkim@igogo.kr": { name: "김승진", role: "개발",       color: "#2dd4a0", isAdmin: false },
     "alex@igogo.kr":    { name: "박지호", role: "세일즈",     color: "#f5a623", isAdmin: false },
@@ -43,7 +44,7 @@
     "junpark@igogo.kr":       { name: "박형준", role: "팀 리더",    color: "#ffffff", isAdmin: true  },
   };
 
-  const MONTH_PHRASE = "재방문을 자극하는 프로덕트로, 훌륭한 파트너의 양질의 체험으로, 더 많은 콘텐츠를 통해 더 많은 유입으로, 효율적인 매체/외부채널/앱 운영관리로 역대 최대 실적을 기록하는 6~8월을 위하여";
+  const MONTH_PHRASE = "재방문을 자극하는 프로덕트로, 훌륭한 파트너의 양질의 체험으로, 더 많은 콘텐츠를 통해 더 많은 유입으로,<br>효율적인 매체/외부채널/앱 운영관리로 역대 최대 실적을 기록하는 6~8월을 위하여";
 
   // ── 상태 ────────────────────────────────────
   let currentUser = null;
@@ -139,7 +140,8 @@
   //  팀원 대시보드
   // ══════════════════════════════════════════════
   async function loadMemberDashboard() {
-    const email = currentUser.email;
+    const rawEmail = currentUser.email;
+    const email = currentMember.qaFor || rawEmail;
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
 
     // 실시간 리스닝
@@ -194,7 +196,7 @@
     document.getElementById("stat-pct").textContent   = pct + "%";
     document.getElementById("progress-fill").style.width = pct + "%";
 
-    document.getElementById("month-phrase").textContent = MONTH_PHRASE;
+    document.getElementById("month-phrase").innerHTML = MONTH_PHRASE;
     document.getElementById("dashboard-name").textContent = currentMember.name;
     document.getElementById("dashboard-role").textContent = currentMember.role;
     document.getElementById("dashboard-month").textContent = currentMonth;
@@ -272,21 +274,34 @@
     document.getElementById("dashboard-content").innerHTML = html;
   }
 
-  // ── 상태 순환 ────────────────────────────────
-  window.cycleStatus = async (itemId) => {
-    const statuses = ["todo","doing","done","hold"];
+  // ── 상태 변경 (드롭다운) ──────────────────────
+  window.changeStatus = async (itemId, newStatus) => {
     const items = [...(dashboardData.items || [])];
     const idx = items.findIndex(i => i.id === itemId);
     if (idx < 0) return;
-    const cur = items[idx].status || "todo";
-    items[idx].status = statuses[(statuses.indexOf(cur)+1) % statuses.length];
+    items[idx].status = newStatus;
+    // 라벨 취소선 처리
+    const lbl = document.getElementById("lbl-" + itemId);
+    if (lbl) lbl.className = "item-label" + (newStatus === "done" ? " done-text" : "");
+    // 카드 클래스 업데이트
+    const card = document.getElementById("card-" + itemId);
+    if (card) card.className = "item-card " + newStatus;
     await saveData({ items });
   };
 
-  // ── 메모 저장 ────────────────────────────────
-  window.saveMemo = async (itemId, value) => {
+  // ── 메모 저장 (버튼) ─────────────────────────
+  window.saveMemoBtn = async (itemId) => {
+    const textarea = document.getElementById("memo-" + itemId);
+    if (!textarea) return;
+    const value = textarea.value;
     const memos = { ...(dashboardData.memos || {}), [itemId]: value };
     await saveData({ memos });
+    // 저장됨 피드백
+    const fb = document.getElementById("saved-" + itemId);
+    if (fb) {
+      fb.classList.add("show");
+      setTimeout(() => fb.classList.remove("show"), 2000);
+    }
   };
   window.saveRetro = async (key, value) => {
     const retro = { ...(dashboardData.retro || {}), [key]: value };
@@ -294,7 +309,7 @@
   };
 
   async function saveData(partial) {
-    const email = currentUser.email;
+    const email = currentMember.qaFor || currentUser.email;
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
     const merged = { ...dashboardData, ...partial, updatedAt: new Date().toISOString() };
     await setDoc(docRef, merged, { merge: true });
@@ -302,7 +317,11 @@
 
   // ── 카드 토글 ────────────────────────────────
   window.toggleCard = (id) => {
-    document.getElementById("body-" + id)?.classList.toggle("open");
+    const body = document.getElementById("body-" + id);
+    if (!body) return;
+    const isOpen = body.classList.toggle("open");
+    const btn = body.closest(".item-card")?.querySelector(".memo-toggle-btn");
+    if (btn) btn.textContent = isOpen ? "메모 ▴" : "메모 ▾";
   };
 
   // ══════════════════════════════════════════════
@@ -315,7 +334,7 @@
     document.getElementById("dashboard-name").textContent = "팀 전체 현황";
     document.getElementById("dashboard-role").textContent = "리더 뷰";
     document.getElementById("dashboard-month").textContent = currentMonth;
-    document.getElementById("month-phrase").textContent = MONTH_PHRASE;
+    document.getElementById("month-phrase").innerHTML = MONTH_PHRASE;
 
     const members = Object.entries(TEAM_MEMBERS).filter(function(e){ return !e[1].isAdmin; });
 
@@ -685,6 +704,41 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 #user-name { font-size:13px; font-weight:500; }
 #user-role { font-size:11px; color:var(--gray); }
 
+
+/* ── STATUS DROPDOWN ── */
+.status-select {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer; outline: none;
+  background: #fff; flex-shrink: 0; transition: border-color 0.15s;
+}
+.status-select:focus { border-color: var(--accent); }
+.status-select.todo  { color: #6b7280; border-color: #d1d5db; background: #f9fafb; }
+.status-select.doing { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+.status-select.done  { color: #15803d; border-color: #86efac; background: #f0fdf4; }
+.status-select.hold  { color: #dc2626; border-color: #fca5a5; background: #fef2f2; }
+
+/* ── MEMO TOGGLE & SAVE ── */
+.memo-toggle-btn {
+  font-size: 11px; color: var(--accent); background: none; border: none;
+  cursor: pointer; padding: 2px 6px; font-family: var(--mono);
+  flex-shrink: 0; text-decoration: underline;
+}
+.item-body { display: none; padding: 0 16px 14px 16px; }
+.item-body.open { display: block; }
+.save-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.save-btn {
+  font-size: 12px; font-family: var(--sans); font-weight: 600;
+  background: var(--accent); color: #fff; border: none; border-radius: 6px;
+  padding: 6px 14px; cursor: pointer; transition: opacity 0.15s;
+}
+.save-btn:hover { opacity: 0.85; }
+.save-feedback {
+  font-size: 11px; font-family: var(--mono); color: #15803d;
+  opacity: 0; transition: opacity 0.3s;
+}
+.save-feedback.show { opacity: 1; }
+
 /* ── LOADING ── */
 .loading-overlay {
   position:fixed; inset:0; background:rgba(244,245,248,0.85);
@@ -710,7 +764,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   border:1px solid var(--border); border-radius:12px; padding:24px 28px; margin-bottom:24px;
   box-shadow:0 2px 8px rgba(0,0,0,0.04);
 }
-.dash-phrase { font-size:13px; color:#d42b2b; line-height:1.8; border-left:3px solid #d42b2b; padding-left:14px; margin-bottom:16px; font-weight:700; }
+.dash-phrase { font-size:16px; color:#d42b2b; line-height:1.75; border-left:4px solid #d42b2b; padding-left:16px; margin-bottom:16px; font-weight:900; font-family:"Noto Serif KR", "Noto Sans KR", sans-serif; letter-spacing:-0.01em; }
 .dash-name-row { display:flex; align-items:baseline; gap:10px; margin-bottom:16px; }
 .dash-name { font-size:22px; font-weight:700; color:#0f1117; }
 .dash-role { font-size:14px; color:#1a1d27; font-weight:500; }
