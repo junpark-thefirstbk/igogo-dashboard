@@ -65,6 +65,19 @@
       errEl.textContent = "로그인 실패. igogo.kr 계정으로 시도해주세요.";
     }
   };
+
+  // ── 토스트 팝업 ─────────────────────────────
+  function showToast(msg, type) {
+    var t = document.getElementById("toast");
+    if (!t) return;
+    t.textContent = msg;
+    t.className = "show " + (type || "success");
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(function() {
+      t.className = t.className.replace("show", "").trim();
+    }, 2200);
+  }
+
   function showLoading(msg) {
     var el = document.getElementById("loading-overlay");
     if (!el) {
@@ -323,12 +336,7 @@
     const links = (dashboardData.links && dashboardData.links[itemId]) || [];
     const dot = document.getElementById("dot-" + itemId);
     if (dot) dot.className = "memo-dot" + (value.trim() || links.length ? " has-memo" : "");
-    // 저장됨 피드백
-    const fb = document.getElementById("saved-" + itemId);
-    if (fb) {
-      fb.classList.add("show");
-      setTimeout(() => fb.classList.remove("show"), 2000);
-    }
+    showToast("메모가 저장되었습니다");
   };
   // ── 링크 추가 ────────────────────────────────
   window.addLink = async (itemId) => {
@@ -545,7 +553,7 @@
             this.className = "status-select " + newS;
             var lbl = el.querySelector(".item-label");
             if (lbl) lbl.className = "item-label" + (newS === "done" ? " done-text" : "");
-            adminChangeStatus(d.email, item.id, newS, d.items, d.memos);
+            adminChangeStatus(d.email, item.id, newS);
           });
 
           // 라벨
@@ -606,7 +614,7 @@
 
           // 저장 이벤트
           saveBtn.addEventListener("click", function() {
-            adminSaveMemo(d.email, item.id, ta.value, d.items, d.memos, saveFb);
+            adminSaveMemo(d.email, item.id, ta.value, saveFb);
           });
 
           secEl.appendChild(el);
@@ -619,31 +627,37 @@
 
 
   // ── 관리자: 팀원 상태 변경 ──────────────────────
-  window.adminChangeStatus = async function(email, itemId, newStatus, items, memos) {
-    var updatedItems = items.map(function(item) {
-      if (item.id === itemId) return Object.assign({}, item, { status: newStatus });
-      return item;
-    });
+  window.adminChangeStatus = async function(email, itemId, newStatus) {
     var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      await setDoc(docRef, { items: updatedItems, memos: memos, updatedAt: new Date().toISOString() }, { merge: true });
+      // 최신 데이터 읽기
+      var snap = await getDocFromServer(docRef);
+      var data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
+      var items = (data.items && data.items.length > 0) ? data.items : getItemsForMember(email);
+      var updatedItems = items.map(function(item) {
+        if (item.id === itemId) return Object.assign({}, item, { status: newStatus });
+        return item;
+      });
+      await setDoc(docRef, Object.assign({}, data, { items: updatedItems, updatedAt: new Date().toISOString() }), { merge: true });
+      showToast("상태가 저장되었습니다");
     } catch(e) {
       console.error("admin status save failed:", e.message);
+      showToast("저장 실패. 다시 시도해주세요", "error");
     }
   };
 
   // ── 관리자: 팀원 메모 저장 ──────────────────────
-  window.adminSaveMemo = async function(email, itemId, value, items, memos, feedbackEl) {
-    var updatedMemos = Object.assign({}, memos, { [itemId]: value });
+  window.adminSaveMemo = async function(email, itemId, value, feedbackEl) {
     var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      await setDoc(docRef, { items: items, memos: updatedMemos, updatedAt: new Date().toISOString() }, { merge: true });
-      if (feedbackEl) {
-        feedbackEl.classList.add("show");
-        setTimeout(function() { feedbackEl.classList.remove("show"); }, 2000);
-      }
+      var snap = await getDocFromServer(docRef);
+      var data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
+      var updatedMemos = Object.assign({}, data.memos || {}, { [itemId]: value });
+      await setDoc(docRef, Object.assign({}, data, { memos: updatedMemos, updatedAt: new Date().toISOString() }), { merge: true });
+      showToast("메모가 저장되었습니다");
     } catch(e) {
       console.error("admin memo save failed:", e.message);
+      showToast("저장 실패. 다시 시도해주세요", "error");
     }
   };
 
@@ -910,11 +924,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   display: inline-block; visibility: visible;
 }
 .save-btn:hover { opacity: 0.85; }
-.save-feedback {
-  font-size: 11px; font-family: var(--mono); color: #15803d;
-  opacity: 0; transition: opacity 0.3s;
-}
-.save-feedback.show { opacity: 1; }
+.save-feedback { display: none; }
 
 
 /* ── MEMO INDICATOR ── */
@@ -959,6 +969,22 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 /* item-body 통일 */
 .item-body { display:none; padding:8px 16px 16px 16px; background:#fafbfd; border-top:1px solid var(--border); }
 .item-body.open { display:block; }
+
+
+/* ── TOAST POPUP ── */
+#toast {
+  position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #1a1d27; color: #fff; font-size: 13px; font-family: var(--sans);
+  padding: 12px 24px; border-radius: 8px; z-index: 9999;
+  opacity: 0; transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+}
+#toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+#toast.success::before { content: "✅ "; }
+#toast.error::before   { content: "❌ "; }
 
 /* ── LOADING ── */
 .loading-overlay {
@@ -1125,5 +1151,6 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   </div>
 </div>
 
+<div id="toast"></div>
 </body>
 </html>
