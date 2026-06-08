@@ -167,6 +167,7 @@
     const items = dashboardData.items || [];
     const memos = dashboardData.memos || {};
     const retro = dashboardData.retro || {};
+    const links = dashboardData.links || {};
 
     // 해당 월 데이터 없으면 빈 화면
     if (items.length === 0 && currentMonth !== "2026-06") {
@@ -220,27 +221,44 @@
       sItems.forEach(item => {
         const s = item.status || "todo";
         const memo = memos[item.id] || "";
+        const links = (dashboardData.links && dashboardData.links[item.id]) || [];
+        const hasMemo = memo.trim().length > 0 || links.length > 0;
+        const savedLinksHtml = links.map((lnk,i) =>
+          `<a class="saved-link-chip" href="${lnk}" target="_blank">🔗 ${lnk}</a>
+           <button class="saved-link-remove" onclick="removeLink('${item.id}',${i})">✕</button>`
+        ).join('');
         html += `
         <div class="item-card ${s}" id="card-${item.id}">
-          <div class="item-header" onclick="toggleCard('${item.id}')">
-            <div class="status-btn" onclick="event.stopPropagation();cycleStatus('${item.id}')"
-              style="border-color:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'#3a3f55'};
-                     background:${s==='done'?'#34d97b':s==='doing'?'#f5c842':'transparent'}">
-              ${s==='done'?'<svg viewBox="0 0 10 10" width="10" height="10"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>'
-                         :(s==='doing'?'<div style="width:6px;height:6px;border-radius:50%;background:#ffffff;margin:auto"></div>':'')}
-            </div>
-            <span class="item-label ${s==='done'?'done-text':''}">${item.label}</span>
+          <div class="item-header">
+            <select class="status-select ${s}" id="sel-${item.id}"
+              onchange="changeStatus('${item.id}',this.value);this.className='status-select '+this.value;">
+              <option value="todo"  ${s==="todo" ?"selected":""}>진행전</option>
+              <option value="doing" ${s==="doing"?"selected":""}>진행중</option>
+              <option value="done"  ${s==="done" ?"selected":""}>완료</option>
+              <option value="hold"  ${s==="hold" ?"selected":""}>보류</option>
+            </select>
+            <span class="item-label ${s==='done'?'done-text':''}" id="lbl-${item.id}">${item.label}</span>
             ${item.tag?`<span class="item-tag">${item.tag}</span>`:''}
             ${item.priority?`<span class="prio-badge prio-${item.priority}">${item.priority}순위</span>`:''}
-            <span class="status-text ${s}">${{todo:'진행전',doing:'진행중',done:'완료',hold:'보류'}[s]}</span>
+            <span class="memo-dot ${hasMemo?'has-memo':''}" id="dot-${item.id}" title="메모 있음"></span>
+            <button class="memo-toggle-btn" onclick="toggleCard('${item.id}')">메모 ▾</button>
           </div>
           <div class="item-body" id="body-${item.id}">
             ${item.desc?`<div class="item-desc">${item.desc}</div>`:''}
             <div class="memo-area">
               <div class="memo-label">비고 / 진행 메모</div>
               <textarea class="memo-input" id="memo-${item.id}"
-                placeholder="진행 현황, 수치, 인사이트를 기록하세요..."
-                onblur="saveMemo('${item.id}', this.value)">${memo}</textarea>
+                placeholder="진행 현황, 수치, 인사이트를 기록하세요...">${memo}</textarea>
+            </div>
+            <div class="memo-link-row">
+              <input class="memo-link-input" id="link-input-${item.id}" type="url"
+                placeholder="https://... 링크 입력 후 추가">
+              <button class="memo-link-btn" onclick="addLink('${item.id}')">링크 추가</button>
+            </div>
+            <div class="saved-links" id="links-${item.id}">${savedLinksHtml}</div>
+            <div class="save-row">
+              <button class="save-btn" onclick="saveMemoBtn('${item.id}')">저장</button>
+              <span class="save-feedback" id="saved-${item.id}">✓ 저장됨</span>
             </div>
           </div>
         </div>`;
@@ -279,10 +297,9 @@
     const idx = items.findIndex(i => i.id === itemId);
     if (idx < 0) return;
     items[idx].status = newStatus;
-    // 라벨 취소선 처리
+    dashboardData.items = items;
     const lbl = document.getElementById("lbl-" + itemId);
     if (lbl) lbl.className = "item-label" + (newStatus === "done" ? " done-text" : "");
-    // 카드 클래스 업데이트
     const card = document.getElementById("card-" + itemId);
     if (card) card.className = "item-card " + newStatus;
     await saveData({ items });
@@ -294,7 +311,12 @@
     if (!textarea) return;
     const value = textarea.value;
     const memos = { ...(dashboardData.memos || {}), [itemId]: value };
+    dashboardData.memos = memos;
     await saveData({ memos });
+    // 메모 닷 업데이트
+    const links = (dashboardData.links && dashboardData.links[itemId]) || [];
+    const dot = document.getElementById("dot-" + itemId);
+    if (dot) dot.className = "memo-dot" + (value.trim() || links.length ? " has-memo" : "");
     // 저장됨 피드백
     const fb = document.getElementById("saved-" + itemId);
     if (fb) {
@@ -302,6 +324,53 @@
       setTimeout(() => fb.classList.remove("show"), 2000);
     }
   };
+  // ── 링크 추가 ────────────────────────────────
+  window.addLink = async (itemId) => {
+    const input = document.getElementById("link-input-" + itemId);
+    if (!input) return;
+    const url = input.value.trim();
+    if (!url || !url.startsWith("http")) {
+      input.style.borderColor = "#dc2626";
+      setTimeout(() => input.style.borderColor = "", 1500);
+      return;
+    }
+    const links = { ...(dashboardData.links || {}) };
+    links[itemId] = [...(links[itemId] || []), url];
+    dashboardData.links = links;
+    await saveData({ links });
+    input.value = "";
+    // 링크 목록 갱신
+    const container = document.getElementById("links-" + itemId);
+    if (container) {
+      container.innerHTML = links[itemId].map((lnk, i) =>
+        `<a class="saved-link-chip" href="${lnk}" target="_blank">🔗 ${lnk}</a>
+         <button class="saved-link-remove" onclick="removeLink('${itemId}',${i})">✕</button>`
+      ).join('');
+    }
+    const dot = document.getElementById("dot-" + itemId);
+    if (dot) dot.className = "memo-dot has-memo";
+  };
+
+  // ── 링크 제거 ────────────────────────────────
+  window.removeLink = async (itemId, idx) => {
+    const links = { ...(dashboardData.links || {}) };
+    const arr = [...(links[itemId] || [])];
+    arr.splice(idx, 1);
+    links[itemId] = arr;
+    dashboardData.links = links;
+    await saveData({ links });
+    const container = document.getElementById("links-" + itemId);
+    if (container) {
+      container.innerHTML = arr.map((lnk, i) =>
+        `<a class="saved-link-chip" href="${lnk}" target="_blank">🔗 ${lnk}</a>
+         <button class="saved-link-remove" onclick="removeLink('${itemId}',${i})">✕</button>`
+      ).join('');
+    }
+    const memo = (dashboardData.memos || {})[itemId] || "";
+    const dot = document.getElementById("dot-" + itemId);
+    if (dot) dot.className = "memo-dot" + (memo.trim() || arr.length ? " has-memo" : "");
+  };
+
   window.saveRetro = async (key, value) => {
     const retro = { ...(dashboardData.retro || {}), [key]: value };
     await saveData({ retro });
@@ -310,8 +379,9 @@
   async function saveData(partial) {
     const email = currentMember.qaFor || currentUser.email;
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
-    const merged = { ...dashboardData, ...partial, updatedAt: new Date().toISOString() };
-    await setDoc(docRef, merged, { merge: true });
+    Object.assign(dashboardData, partial);
+    dashboardData.updatedAt = new Date().toISOString();
+    await setDoc(docRef, dashboardData, { merge: true });
   }
 
   // ── 카드 토글 ────────────────────────────────
@@ -828,8 +898,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   cursor: pointer; padding: 2px 6px; font-family: var(--mono);
   flex-shrink: 0; text-decoration: underline;
 }
-.item-body { display: none; padding: 0 16px 14px 16px; }
-.item-body.open { display: block; }
+
 .save-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .save-btn {
   font-size: 12px; font-family: var(--sans); font-weight: 600;
@@ -842,6 +911,50 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   opacity: 0; transition: opacity 0.3s;
 }
 .save-feedback.show { opacity: 1; }
+
+
+/* ── MEMO INDICATOR ── */
+.memo-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:#4174f6; flex-shrink:0; margin-left:2px;
+  display:none;
+}
+.memo-dot.has-memo { display:inline-block; }
+
+/* ── LINK PREVIEW ── */
+.memo-link-row { display:flex; gap:6px; margin-top:6px; }
+.memo-link-input {
+  flex:1; font-size:12px; font-family:var(--mono);
+  border:1px solid var(--border); border-radius:6px;
+  padding:6px 10px; outline:none; color:var(--text);
+  background:#fff;
+}
+.memo-link-input:focus { border-color:var(--accent); }
+.memo-link-btn {
+  font-size:11px; padding:6px 10px; border-radius:6px;
+  border:1px solid var(--accent); color:var(--accent);
+  background:#fff; cursor:pointer; white-space:nowrap;
+  font-family:var(--mono);
+}
+.memo-link-btn:hover { background:#eef1fb; }
+.saved-links { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; }
+.saved-link-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; font-family:var(--mono);
+  background:#eef1fb; color:#4174f6; border-radius:4px;
+  padding:3px 8px; text-decoration:none; max-width:260px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.saved-link-chip:hover { background:#dce5fc; }
+.saved-link-remove {
+  background:none; border:none; cursor:pointer;
+  color:#9ca3af; font-size:12px; padding:0; line-height:1;
+}
+.saved-link-remove:hover { color:#dc2626; }
+
+/* item-body 통일 */
+.item-body { display:none; padding:0 14px 14px 14px; }
+.item-body.open { display:block; }
 
 /* ── LOADING ── */
 .loading-overlay {
@@ -910,8 +1023,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .status-text.done { color:#15803d; }
 .status-text.hold { color:#dc2626; }
 
-.item-body { display:none; padding:0 16px 14px 46px; }
-.item-body.open { display:block; }
+
 .item-desc { font-size:12px; color:var(--text2); margin-bottom:10px; line-height:1.7; }
 .memo-area { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
 .memo-label { font-family:var(--mono); font-size:10px; color:#1a1d27; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; font-weight:600; }
