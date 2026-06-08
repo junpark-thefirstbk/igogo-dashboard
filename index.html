@@ -139,15 +139,21 @@
   //  팀원 대시보드
   // ══════════════════════════════════════════════
   async function loadMemberDashboard() {
-    const rawEmail = currentUser.email;
-    const email = currentMember.qaFor || rawEmail;
+    const email = currentUser.email;
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
 
     // 실시간 리스닝
     if (unsubscribe) unsubscribe();
     unsubscribe = onSnapshot(docRef, snap => {
       if (snap.exists()) {
-        dashboardData = snap.data();
+        const d = snap.data();
+        dashboardData = {
+          items: d.items || getItemsForMember(email),
+          memos: d.memos || {},
+          retro: d.retro || {},
+          links: d.links || {},
+          updatedAt: d.updatedAt || null
+        };
       } else {
         dashboardData = getInitialData(email);
       }
@@ -157,9 +163,9 @@
 
   function getInitialData(email) {
     if (currentMonth === "2026-06") {
-      return { items: getItemsForMember(email), memos: {}, retro: {}, updatedAt: null };
+      return { items: getItemsForMember(email), memos: {}, retro: {}, links: {}, updatedAt: null };
     }
-    return { items: [], memos: {}, retro: {}, updatedAt: null };
+    return { items: [], memos: {}, retro: {}, links: {}, updatedAt: null };
   }
 
   // ── 아이템 렌더 ──────────────────────────────
@@ -377,7 +383,7 @@
   };
 
   async function saveData(partial) {
-    const email = currentMember.qaFor || currentUser.email;
+    const email = currentUser.email;
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
     Object.assign(dashboardData, partial);
     dashboardData.updatedAt = new Date().toISOString();
@@ -393,9 +399,6 @@
     if (btn) btn.textContent = isOpen ? "메모 ▴" : "메모 ▾";
   };
 
-  // ══════════════════════════════════════════════
-  //  관리자 뷰
-  // ══════════════════════════════════════════════
   // ══════════════════════════════════════════════
   //  관리자 뷰
   // ══════════════════════════════════════════════
@@ -899,11 +902,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
   flex-shrink: 0; text-decoration: underline;
 }
 
-.save-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.save-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .save-btn {
   font-size: 12px; font-family: var(--sans); font-weight: 600;
-  background: var(--accent); color: #fff; border: none; border-radius: 6px;
-  padding: 6px 14px; cursor: pointer; transition: opacity 0.15s;
+  background: #4174f6; color: #fff !important; border: none; border-radius: 6px;
+  padding: 7px 16px; cursor: pointer; transition: opacity 0.15s;
+  display: inline-block; visibility: visible;
 }
 .save-btn:hover { opacity: 0.85; }
 .save-feedback {
@@ -931,10 +935,10 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 }
 .memo-link-input:focus { border-color:var(--accent); }
 .memo-link-btn {
-  font-size:11px; padding:6px 10px; border-radius:6px;
-  border:1px solid var(--accent); color:var(--accent);
+  font-size:12px; padding:7px 12px; border-radius:6px;
+  border:1px solid #4174f6; color:#4174f6;
   background:#fff; cursor:pointer; white-space:nowrap;
-  font-family:var(--mono);
+  font-family:var(--sans); font-weight:600;
 }
 .memo-link-btn:hover { background:#eef1fb; }
 .saved-links { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; }
@@ -953,7 +957,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 .saved-link-remove:hover { color:#dc2626; }
 
 /* item-body 통일 */
-.item-body { display:none; padding:0 14px 14px 14px; }
+.item-body { display:none; padding:8px 16px 16px 16px; background:#fafbfd; border-top:1px solid var(--border); }
 .item-body.open { display:block; }
 
 /* ── LOADING ── */
@@ -1025,7 +1029,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 
 
 .item-desc { font-size:12px; color:var(--text2); margin-bottom:10px; line-height:1.7; }
-.memo-area { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.memo-area { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:8px; }
 .memo-label { font-family:var(--mono); font-size:10px; color:#1a1d27; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:6px; font-weight:600; }
 .memo-input { width:100%; background:transparent; border:none; outline:none; color:#0f1117; font-family:var(--sans); font-size:13px; resize:vertical; min-height:56px; line-height:1.7; }
 .memo-input::placeholder { color:var(--border); }
