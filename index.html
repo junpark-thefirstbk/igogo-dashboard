@@ -35,7 +35,6 @@
   // ── 팀원 정보 (관리자가 사전 정의) ──────────────────
   const TEAM_MEMBERS = {
     "moon@igogo.kr":   { name: "문수빈", role: "운영마케팅", color: "#4f8aff", isAdmin: false },
-    "hello@igogo.kr":  { name: "문수빈(QA)", role: "운영마케팅", color: "#4f8aff", isAdmin: false, qaFor: "moon@igogo.kr" },
     "ijkim@igogo.kr":    { name: "김일주", role: "디자인",     color: "#a78bfa", isAdmin: false },
     "sjkim@igogo.kr": { name: "김승진", role: "개발",       color: "#2dd4a0", isAdmin: false },
     "alex@igogo.kr":    { name: "박지호", role: "세일즈",     color: "#f5a623", isAdmin: false },
@@ -444,24 +443,99 @@
           "</div>";
 
         se[1].forEach(function(item) {
-          var s     = item.status || "todo";
-          var label = {todo:"진행전",doing:"진행중",done:"완료",hold:"보류"}[s];
-          var memo  = d.memos[item.id] || "";
-          var bc    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"#3a3f55";
-          var bg    = s==="done"?"#34d97b":s==="doing"?"#f5c842":"transparent";
-          var chk   = s==="done"?"<svg viewBox='0 0 10 10' width='10' height='10'><path d='M1.5 5l2.5 2.5 4.5-5' stroke='#ffffff' stroke-width='2' fill='none' stroke-linecap='round'/></svg>":"";
+          var s    = item.status || "todo";
+          var memo = d.memos[item.id] || "";
           var tagH  = item.tag      ? "<span class='item-tag'>" + item.tag + "</span>" : "";
           var prioH = item.priority ? "<span class='prio-badge prio-" + item.priority + "'>" + item.priority + "순위</span>" : "";
-          var memoH = memo          ? "<div class='admin-memo'>&#128172; " + memo + "</div>" : "";
+
           var el = document.createElement("div");
           el.className = "item-card " + s;
-          el.innerHTML =
-            "<div class='item-header'>" +
-              "<div class='status-btn' style='border-color:" + bc + ";background:" + bg + "'>" + chk + "</div>" +
-              "<span class='item-label" + (s==="done"?" done-text":"") + "'>" + item.label + "</span>" +
-              tagH + prioH +
-              "<span class='status-text " + s + "'>" + label + "</span>" +
-            "</div>" + memoH;
+          el.id = "admin-card-" + d.safeId + "-" + item.id;
+
+          // 헤더 행
+          var hdrDiv = document.createElement("div");
+          hdrDiv.className = "item-header";
+
+          // 드롭다운
+          var sel = document.createElement("select");
+          sel.className = "status-select " + s;
+          ["todo","doing","done","hold"].forEach(function(val) {
+            var opt = document.createElement("option");
+            opt.value = val;
+            opt.textContent = {todo:"진행전",doing:"진행중",done:"완료",hold:"보류"}[val];
+            if (val === s) opt.selected = true;
+            sel.appendChild(opt);
+          });
+          sel.addEventListener("change", function() {
+            var newS = this.value;
+            el.className = "item-card " + newS;
+            this.className = "status-select " + newS;
+            var lbl = el.querySelector(".item-label");
+            if (lbl) lbl.className = "item-label" + (newS === "done" ? " done-text" : "");
+            adminChangeStatus(d.email, item.id, newS, d.items, d.memos);
+          });
+
+          // 라벨
+          var lbl = document.createElement("span");
+          lbl.className = "item-label" + (s === "done" ? " done-text" : "");
+          lbl.innerHTML = item.label;
+
+          // 메모 토글 버튼
+          var memoBtn = document.createElement("button");
+          memoBtn.className = "memo-toggle-btn";
+          memoBtn.textContent = "메모 ▾";
+
+          hdrDiv.innerHTML = tagH + prioH;
+          hdrDiv.insertBefore(sel, hdrDiv.firstChild);
+          hdrDiv.insertBefore(lbl, hdrDiv.children[1]);
+          hdrDiv.appendChild(memoBtn);
+          el.appendChild(hdrDiv);
+
+          // 메모 바디
+          var bodyDiv = document.createElement("div");
+          bodyDiv.className = "item-body";
+
+          if (item.desc) {
+            var descEl = document.createElement("div");
+            descEl.className = "item-desc";
+            descEl.textContent = item.desc;
+            bodyDiv.appendChild(descEl);
+          }
+
+          var memoArea = document.createElement("div");
+          memoArea.className = "memo-area";
+          memoArea.innerHTML = "<div class='memo-label'>비고 / 진행 메모</div>";
+          var ta = document.createElement("textarea");
+          ta.className = "memo-input";
+          ta.placeholder = "진행 현황, 수치, 인사이트를 기록하세요...";
+          ta.value = memo;
+          memoArea.appendChild(ta);
+          bodyDiv.appendChild(memoArea);
+
+          var saveRow = document.createElement("div");
+          saveRow.className = "save-row";
+          var saveBtn = document.createElement("button");
+          saveBtn.className = "save-btn";
+          saveBtn.textContent = "저장";
+          var saveFb = document.createElement("span");
+          saveFb.className = "save-feedback";
+          saveFb.textContent = "✓ 저장됨";
+          saveRow.appendChild(saveBtn);
+          saveRow.appendChild(saveFb);
+          bodyDiv.appendChild(saveRow);
+          el.appendChild(bodyDiv);
+
+          // 메모 토글 이벤트
+          memoBtn.addEventListener("click", function() {
+            var isOpen = bodyDiv.classList.toggle("open");
+            memoBtn.textContent = isOpen ? "메모 ▴" : "메모 ▾";
+          });
+
+          // 저장 이벤트
+          saveBtn.addEventListener("click", function() {
+            adminSaveMemo(d.email, item.id, ta.value, d.items, d.memos, saveFb);
+          });
+
           secEl.appendChild(el);
         });
         block.appendChild(secEl);
@@ -469,6 +543,36 @@
       container.appendChild(block);
     });
   }
+
+
+  // ── 관리자: 팀원 상태 변경 ──────────────────────
+  window.adminChangeStatus = async function(email, itemId, newStatus, items, memos) {
+    var updatedItems = items.map(function(item) {
+      if (item.id === itemId) return Object.assign({}, item, { status: newStatus });
+      return item;
+    });
+    var docRef = doc(db, "dashboards", email, "months", currentMonth);
+    try {
+      await setDoc(docRef, { items: updatedItems, memos: memos, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch(e) {
+      console.error("admin status save failed:", e.message);
+    }
+  };
+
+  // ── 관리자: 팀원 메모 저장 ──────────────────────
+  window.adminSaveMemo = async function(email, itemId, value, items, memos, feedbackEl) {
+    var updatedMemos = Object.assign({}, memos, { [itemId]: value });
+    var docRef = doc(db, "dashboards", email, "months", currentMonth);
+    try {
+      await setDoc(docRef, { items: items, memos: updatedMemos, updatedAt: new Date().toISOString() }, { merge: true });
+      if (feedbackEl) {
+        feedbackEl.classList.add("show");
+        setTimeout(function() { feedbackEl.classList.remove("show"); }, 2000);
+      }
+    } catch(e) {
+      console.error("admin memo save failed:", e.message);
+    }
+  };
 
   window.toggleMemberDetail = function(id) {
     var el = document.getElementById(id);
