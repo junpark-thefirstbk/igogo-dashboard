@@ -431,8 +431,11 @@
           var items = defItems, memos = {};
           if (snap.exists()) {
             var d = snap.data();
+            console.log("[loadAdmin]", email, "snap exists, items count:", d.items ? d.items.length : 0, "fromFirestore:", d.items && d.items.length > 0);
             if (d.items && d.items.length > 0) items = d.items;
             memos = d.memos || {};
+          } else {
+            console.log("[loadAdmin]", email, "NO snap - using defItems");
           }
           return { email:email, safeId:safeId, info:info, items:items, memos:memos };
         })
@@ -687,58 +690,65 @@
     });
   }
 
+  // ── 관리자: 팀원 상태 변경 ──────────────────────
   window.adminChangeStatus = async function(email, itemId, newStatus) {
-    var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      var snap, data;
-      try {
-        snap = await getDoc(docRef);
-        data = snap.exists() ? snap.data() : null;
-      } catch(e) { data = null; }
-      if (!data) data = { items: getItemsForMember(email), memos: {}, links: {} };
-      var items = (data.items && data.items.length > 0) ? data.items : getItemsForMember(email);
+      // 캐시에서 items 가져오기
+      var cached = window._adminCache && window._adminCache[email];
+      var items = (cached && cached.items && cached.items.length > 0)
+        ? cached.items : getItemsForMember(email);
+
       var updatedItems = items.map(function(item) {
         if (item.id === itemId) return Object.assign({}, item, { status: newStatus });
         return item;
       });
-      var saveData = Object.assign({}, data, { items: updatedItems, updatedAt: new Date().toISOString() });
-      await setDoc(docRef, saveData, { merge: true });
-      // 관리자 캐시 업데이트
+
+      // updateDoc으로 items 필드만 업데이트 (읽기 없이 바로 저장)
+      var docRef = doc(db, "dashboards", email, "months", currentMonth);
+      await setDoc(docRef, {
+        items: updatedItems,
+        memos: (cached && cached.memos) || {},
+        links: (cached && cached.links) || {},
+        updatedAt: new Date().toISOString()
+      });
+
+      // 캐시 업데이트
       if (!window._adminCache) window._adminCache = {};
-      window._adminCache[email] = saveData;
+      window._adminCache[email] = Object.assign({}, cached || {}, { items: updatedItems });
       showToast("상태가 저장되었습니다");
       updateAdminStats();
     } catch(e) {
-      console.error("admin status save failed:", e.message);
+      console.error("adminChangeStatus failed:", e.message);
       showToast("저장 실패: " + e.message, "error");
     }
   };
 
   // ── 관리자: 팀원 메모 저장 ──────────────────────
   window.adminSaveMemo = async function(email, itemId, value, feedbackEl) {
-    var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      var snap, data;
-      try {
-        snap = await getDoc(docRef);
-        data = snap.exists() ? snap.data() : null;
-      } catch(e) { data = null; }
-      if (!data) {
-        // 캐시에서 가져오기
-        data = (window._adminCache && window._adminCache[email]) ||
-               { items: getItemsForMember(email), memos: {}, links: {} };
-      }
-      var updatedMemos = Object.assign({}, data.memos || {}, { [itemId]: value });
-      var saveData = Object.assign({}, data, { memos: updatedMemos, updatedAt: new Date().toISOString() });
-      await setDoc(docRef, saveData, { merge: true });
+      var cached = window._adminCache && window._adminCache[email];
+      var items = (cached && cached.items && cached.items.length > 0)
+        ? cached.items : getItemsForMember(email);
+      var memos = Object.assign({}, (cached && cached.memos) || {}, { [itemId]: value });
+
+      var docRef = doc(db, "dashboards", email, "months", currentMonth);
+      await setDoc(docRef, {
+        items: items,
+        memos: memos,
+        links: (cached && cached.links) || {},
+        updatedAt: new Date().toISOString()
+      });
+
+      // 캐시 업데이트
       if (!window._adminCache) window._adminCache = {};
-      window._adminCache[email] = saveData;
+      window._adminCache[email] = Object.assign({}, cached || {}, { memos: memos });
       showToast("메모가 저장되었습니다");
     } catch(e) {
-      console.error("admin memo save failed:", e.message);
+      console.error("adminSaveMemo failed:", e.message);
       showToast("저장 실패: " + e.message, "error");
     }
   };
+
 
   window.toggleMemberDetail = function(id) {
     var el = document.getElementById(id);
