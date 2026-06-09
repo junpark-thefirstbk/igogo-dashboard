@@ -12,7 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, collection, getDocs, onSnapshot, enableNetwork }
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot, enableNetwork }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   // ══════════════════════════════════════════
@@ -426,7 +426,7 @@
       const info    = m[1];
       const safeId  = "mbr_" + email.replace(/[^a-zA-Z0-9]/g, "_");
       const defItems = currentMonth === "2026-06" ? getItemsForMember(email) : [];
-      return getDocFromServer(doc(db, "dashboards", email, "months", currentMonth))
+      return getDoc(doc(db, "dashboards", email, "months", currentMonth))
         .then(function(snap) {
           var items = defItems, memos = {};
           if (snap.exists()) {
@@ -448,6 +448,13 @@
       doneAll  += d.items.filter(function(x){ return x.status==="done";  }).length;
       doingAll += d.items.filter(function(x){ return x.status==="doing"; }).length;
     });
+
+    // 관리자 캐시 초기화
+    window._adminCache = {};
+    allData.forEach(function(d) {
+      window._adminCache[d.email] = { items: d.items, memos: d.memos, links: {} };
+    });
+
     var pctAll = totalAll ? Math.round(doneAll/totalAll*100) : 0;
     document.getElementById("stat-total").textContent = totalAll;
     document.getElementById("stat-done").textContent  = doneAll;
@@ -627,22 +634,83 @@
 
 
   // ── 관리자: 팀원 상태 변경 ──────────────────────
+
+  // ── 관리자 통계 즉시 업데이트 ────────────────
+  function updateAdminStats() {
+    if (!window._adminCache) return;
+    var members = Object.entries(TEAM_MEMBERS).filter(function(e){ return !e[1].isAdmin; });
+    var totalAll = 0, doneAll = 0, doingAll = 0;
+    members.forEach(function(m) {
+      var email = m[0];
+      var cached = window._adminCache[email];
+      if (!cached) return;
+      var items = cached.items || [];
+      totalAll += items.length;
+      doneAll  += items.filter(function(x){ return x.status === "done";  }).length;
+      doingAll += items.filter(function(x){ return x.status === "doing"; }).length;
+    });
+    var pctAll = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+    document.getElementById("stat-total").textContent = totalAll;
+    document.getElementById("stat-done").textContent  = doneAll;
+    document.getElementById("stat-doing").textContent = doingAll;
+    document.getElementById("stat-pct").textContent   = pctAll + "%";
+    document.getElementById("progress-fill").style.width = pctAll + "%";
+    // 개별 카드 달성률도 업데이트
+    members.forEach(function(m) {
+      var email = m[0];
+      var safeId = "mbr_" + email.replace(/[^a-zA-Z0-9]/g, "_");
+      var cached = window._adminCache[email];
+      if (!cached) return;
+      var items = cached.items || [];
+      var done  = items.filter(function(x){ return x.status === "done";  }).length;
+      var doing = items.filter(function(x){ return x.status === "doing"; }).length;
+      var total = items.length;
+      var pct   = total ? Math.round(done/total*100) : 0;
+      var card  = document.querySelector("#" + safeId)?.closest ? null : null;
+      // 카드 내 pct 업데이트
+      var cardEls = document.querySelectorAll(".admin-card");
+      cardEls.forEach(function(card) {
+        var pctEl = card.querySelector(".admin-pct");
+        var nameEl = card.querySelector(".admin-name");
+        if (nameEl && nameEl.textContent === m[1].name) {
+          if (pctEl) pctEl.textContent = pct + "%";
+          var barFill = card.querySelector(".admin-bar-fill");
+          if (barFill) barFill.style.width = pct + "%";
+          var statsEl = card.querySelector(".admin-stats");
+          if (statsEl) statsEl.innerHTML =
+            "<span>전체 <b>" + total + "</b></span>" +
+            "<span style='color:#1aad5e'>완료 <b>" + done  + "</b></span>" +
+            "<span style='color:#e09400'>진행중 <b>" + doing + "</b></span>" +
+            "<span style='color:#d42b2b;font-weight:600'>미완 <b>" + (total-done-doing) + "</b></span>";
+        }
+      });
+    });
+  }
+
   window.adminChangeStatus = async function(email, itemId, newStatus) {
     var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      // 최신 데이터 읽기
-      var snap = await getDocFromServer(docRef);
-      var data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
+      var snap, data;
+      try {
+        snap = await getDoc(docRef);
+        data = snap.exists() ? snap.data() : null;
+      } catch(e) { data = null; }
+      if (!data) data = { items: getItemsForMember(email), memos: {}, links: {} };
       var items = (data.items && data.items.length > 0) ? data.items : getItemsForMember(email);
       var updatedItems = items.map(function(item) {
         if (item.id === itemId) return Object.assign({}, item, { status: newStatus });
         return item;
       });
-      await setDoc(docRef, Object.assign({}, data, { items: updatedItems, updatedAt: new Date().toISOString() }), { merge: true });
+      var saveData = Object.assign({}, data, { items: updatedItems, updatedAt: new Date().toISOString() });
+      await setDoc(docRef, saveData, { merge: true });
+      // 관리자 캐시 업데이트
+      if (!window._adminCache) window._adminCache = {};
+      window._adminCache[email] = saveData;
       showToast("상태가 저장되었습니다");
+      updateAdminStats();
     } catch(e) {
       console.error("admin status save failed:", e.message);
-      showToast("저장 실패. 다시 시도해주세요", "error");
+      showToast("저장 실패: " + e.message, "error");
     }
   };
 
@@ -650,14 +718,25 @@
   window.adminSaveMemo = async function(email, itemId, value, feedbackEl) {
     var docRef = doc(db, "dashboards", email, "months", currentMonth);
     try {
-      var snap = await getDocFromServer(docRef);
-      var data = snap.exists() ? snap.data() : { items: getItemsForMember(email), memos: {} };
+      var snap, data;
+      try {
+        snap = await getDoc(docRef);
+        data = snap.exists() ? snap.data() : null;
+      } catch(e) { data = null; }
+      if (!data) {
+        // 캐시에서 가져오기
+        data = (window._adminCache && window._adminCache[email]) ||
+               { items: getItemsForMember(email), memos: {}, links: {} };
+      }
       var updatedMemos = Object.assign({}, data.memos || {}, { [itemId]: value });
-      await setDoc(docRef, Object.assign({}, data, { memos: updatedMemos, updatedAt: new Date().toISOString() }), { merge: true });
+      var saveData = Object.assign({}, data, { memos: updatedMemos, updatedAt: new Date().toISOString() });
+      await setDoc(docRef, saveData, { merge: true });
+      if (!window._adminCache) window._adminCache = {};
+      window._adminCache[email] = saveData;
       showToast("메모가 저장되었습니다");
     } catch(e) {
       console.error("admin memo save failed:", e.message);
-      showToast("저장 실패. 다시 시도해주세요", "error");
+      showToast("저장 실패: " + e.message, "error");
     }
   };
 
@@ -675,7 +754,7 @@
   window.viewMemberDetail = async (email) => {
     const info = TEAM_MEMBERS[email];
     const docRef = doc(db, "dashboards", email, "months", currentMonth);
-    const snap = await getDocFromServer(docRef);
+    const snap = await getDoc(docRef);
     const data = snap.exists() ? snap.data() : { items: getItemsForMember(email) };
     const items = data.items || [];
     const memos = data.memos || {};
